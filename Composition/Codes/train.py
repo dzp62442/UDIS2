@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import os
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from network import build_model, Network
+from network import build_model, CompositionNetwork
 from dataset import CompositionTrainDataset
 import glob
 from loss import cal_boundary_term, cal_smooth_term_stitch, cal_smooth_term_diff
@@ -39,7 +39,7 @@ def train(args):
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
 
     # define the network
-    net = Network()
+    net = CompositionNetwork()
 
     if torch.cuda.is_available():
         net = net.cuda()

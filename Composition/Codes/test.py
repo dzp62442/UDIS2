@@ -2,7 +2,7 @@
 import argparse
 import torch
 from torch.utils.data import DataLoader
-from network import build_model, Network
+from network import build_model, CompositionNetwork
 from dataset import *
 import os
 import numpy as np
@@ -25,7 +25,7 @@ def test(args):
     test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)
 
     # define the network
-    net = Network()
+    net = CompositionNetwork()
     if torch.cuda.is_available():
         net = net.cuda()
 

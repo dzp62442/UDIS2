@@ -73,9 +73,9 @@ class UpBlock(nn.Module):
         return x
 
 # predict the composition mask of img1
-class Network(nn.Module):
+class CompositionNetwork(nn.Module):
     def __init__(self, nclasses=1):
-        super(Network, self).__init__()
+        super(CompositionNetwork, self).__init__()
 
 
         self.down1 = DownBlock(3, 32, 1, pool=False)

@@ -1,7 +1,7 @@
 # coding: utf-8
 import argparse
 import torch
-from network import build_model, Network
+from network import build_model, CompositionNetwork
 import os
 import numpy as np
 import cv2
@@ -53,7 +53,7 @@ def test_other(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     # define the network
-    net = Network()
+    net = CompositionNetwork()
     if torch.cuda.is_available():
         net = net.cuda()
 

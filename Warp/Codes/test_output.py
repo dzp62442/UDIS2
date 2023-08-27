@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 import imageio
-from network import build_output_model, Network
+from network import build_output_model, WarpNetwork
 from dataset import *
 import os
 import cv2
@@ -63,7 +63,7 @@ def test(args):
     test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)
 
     # define the network
-    net = Network()#build_model(args.model_name)
+    net = WarpNetwork()#build_model(args.model_name)
     if torch.cuda.is_available():
         net = net.cuda()
 

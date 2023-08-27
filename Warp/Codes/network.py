@@ -363,10 +363,10 @@ def build_output_model(net, input1_tensor, input2_tensor):
 
 
 # define and forward
-class Network(nn.Module):
+class WarpNetwork(nn.Module):
 
     def __init__(self):
-        super(Network, self).__init__()
+        super(WarpNetwork, self).__init__()
 
         self.regressNet1_part1 = nn.Sequential(
             nn.Conv2d(2, 64, kernel_size=3, padding=1, bias=False),

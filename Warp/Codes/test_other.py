@@ -8,7 +8,7 @@ import torch.optim as optim
 
 import cv2
 #from torch_homography_model import build_model
-from network import get_stitched_result, Network, build_new_ft_model
+from network import get_stitched_result, WarpNetwork, build_new_ft_model
 
 import glob
 from loss import cal_lp_loss2
@@ -59,7 +59,7 @@ def train(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     
     # define the network
-    net = Network()
+    net = WarpNetwork()
     if torch.cuda.is_available():
         net = net.cuda()
 
