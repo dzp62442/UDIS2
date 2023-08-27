@@ -8,6 +8,7 @@ from network import build_output_model, Network
 from dataset import *
 import os
 import cv2
+from tqdm import tqdm
 
 import grid_res
 grid_h = grid_res.GRID_H
@@ -84,7 +85,7 @@ def test(args):
     print("##################start testing#######################")
     # create folders if it dose not exist
 
-    path_ave_fusion = '../ave_fusion/'
+    path_ave_fusion = args.test_path + 'ave_fusion/'
     if not os.path.exists(path_ave_fusion):
         os.makedirs(path_ave_fusion)
     path_warp1 = args.test_path + 'warp1/'
@@ -103,7 +104,7 @@ def test(args):
 
 
     net.eval()
-    for i, batch_value in enumerate(test_loader):
+    for i, batch_value in tqdm(enumerate(test_loader)):
 
         #if i != 975:
         #    continue
@@ -134,7 +135,6 @@ def test(args):
         final_mesh2 = final_mesh2[0].cpu().detach().numpy()
 
 
-
         path = path_warp1 + str(i+1).zfill(6) + ".jpg"
         cv2.imwrite(path, final_warp1)
         path = path_warp2 + str(i+1).zfill(6) + ".jpg"
@@ -148,7 +148,7 @@ def test(args):
         path = path_ave_fusion + str(i+1).zfill(6) + ".jpg"
         cv2.imwrite(path, ave_fusion)
 
-        print('i = {}'.format( i+1))
+        # print('i = {}'.format( i+1))
 
         torch.cuda.empty_cache()
 
@@ -164,9 +164,8 @@ if __name__=="__main__":
 
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--batch_size', type=int, default=1)
-    
-    # /opt/data/private/nl/Data/UDIS-D/testing/  or  /opt/data/private/nl/Data/UDIS-D/training/
-    parser.add_argument('--test_path', type=str, default='/opt/data/private/nl/Data/UDIS-D/testing/')
+    # parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/UDIS-D/testing/')
+    parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/RealTractor2/testing/')
 
 
     print('<==================== Loading data ===================>\n')

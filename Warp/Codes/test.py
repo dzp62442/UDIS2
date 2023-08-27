@@ -69,16 +69,13 @@ def test(args):
             warp_mesh_mask = batch_out['warp_mesh_mask']
             warp_mesh = batch_out['warp_mesh']
 
-
             warp_mesh_np = ((warp_mesh[0]+1)*127.5).cpu().detach().numpy().transpose(1,2,0)
             warp_mesh_mask_np = warp_mesh_mask[0].cpu().detach().numpy().transpose(1,2,0)
             inpu1_np = ((inpu1_tesnor[0]+1)*127.5).cpu().detach().numpy().transpose(1,2,0)
 
-
             # calculate psnr/ssim
             psnr = skimage.measure.compare_psnr(inpu1_np*warp_mesh_mask_np, warp_mesh_np*warp_mesh_mask_np, 255)
             ssim = skimage.measure.compare_ssim(inpu1_np*warp_mesh_mask_np, warp_mesh_np*warp_mesh_mask_np, data_range=255, multichannel=True)
-
 
             print('i = {}, psnr = {:.6f}'.format( i+1, psnr))
 
@@ -114,7 +111,8 @@ if __name__=="__main__":
 
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--test_path', type=str, default='/opt/data/private/nl/Data/UDIS-D/testing/')
+    # parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/UDIS-D/testing/')
+    parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/RealTractor2/testing/')
 
     print('<==================== Loading data ===================>\n')
 

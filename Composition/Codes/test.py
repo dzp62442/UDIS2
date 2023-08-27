@@ -7,6 +7,7 @@ from dataset import *
 import os
 import numpy as np
 import cv2
+from tqdm import tqdm
 
 
 last_path = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))
@@ -41,20 +42,20 @@ def test(args):
         return
 
 
-    path_learn_mask1 = '../learn_mask1/'
+    path_learn_mask1 = args.test_path + 'learn_mask1/'
     if not os.path.exists(path_learn_mask1):
         os.makedirs(path_learn_mask1)
-    path_learn_mask2 = '../learn_mask2/'
+    path_learn_mask2 = args.test_path + 'learn_mask2/'
     if not os.path.exists(path_learn_mask2):
         os.makedirs(path_learn_mask2)
-    path_final_composition = '../composition/'
+    path_final_composition = args.test_path + 'composition/'
     if not os.path.exists(path_final_composition):
         os.makedirs(path_final_composition)
 
 
     print("##################start testing#######################")
     net.eval()
-    for i, batch_value in enumerate(test_loader):
+    for i, batch_value in tqdm(enumerate(test_loader)):
 
         warp1_tensor = batch_value[0].float()
         warp2_tensor = batch_value[1].float()
@@ -89,8 +90,7 @@ def test(args):
         path = path_final_composition + str(i+1).zfill(6) + ".jpg"
         cv2.imwrite(path, stitched_image)
 
-
-        print('i = {}'.format( i+1))
+        # print('i = {}'.format( i+1))
 
 
 
@@ -100,7 +100,8 @@ if __name__=="__main__":
 
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--test_path', type=str, default='/opt/data/private/nl/Data/UDIS-D/testing/')
+    # parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/UDIS-D/testing/')
+    parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/RealTractor2/testing/')
 
     print('<==================== Loading data ===================>\n')
 
