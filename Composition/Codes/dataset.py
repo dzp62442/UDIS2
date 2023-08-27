@@ -7,7 +7,7 @@ from collections import OrderedDict
 import random
 
 
-class TrainDataset(Dataset):
+class CompositionTrainDataset(Dataset):
     def __init__(self, data_path):
 
         self.train_path = data_path
@@ -70,7 +70,7 @@ class TrainDataset(Dataset):
 
         return len(self.datas['warp1']['image'])
 
-class TestDataset(Dataset):
+class CompositionTestDataset(Dataset):
     def __init__(self, data_path):
 
         self.test_path = data_path

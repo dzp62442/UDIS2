@@ -5,7 +5,7 @@ import os
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from network import build_model, Network
-from dataset import TrainDataset
+from dataset import WarpTrainDataset
 import glob
 from loss import cal_lp_loss, inter_grid_loss, intra_grid_loss
 
@@ -31,7 +31,7 @@ def train(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     
     # define dataset
-    train_data = TrainDataset(data_path=args.train_path)
+    train_data = WarpTrainDataset(data_path=args.train_path)
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
 
     # define the network

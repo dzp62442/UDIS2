@@ -5,7 +5,7 @@ import os
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from network import build_model, Network
-from dataset import TrainDataset
+from dataset import CompositionTrainDataset
 import glob
 from loss import cal_boundary_term, cal_smooth_term_stitch, cal_smooth_term_diff
 
@@ -35,7 +35,7 @@ def train(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     # dataset
-    train_data = TrainDataset(data_path=args.train_path)
+    train_data = CompositionTrainDataset(data_path=args.train_path)
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
 
     # define the network

@@ -58,7 +58,7 @@ def test(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     
     # dataset
-    test_data = TestDataset(data_path=args.test_path)
+    test_data = WarpTestDataset(data_path=args.test_path)
     #nl: set num_workers = the number of cpus
     test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)
 
