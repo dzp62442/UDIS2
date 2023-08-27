@@ -2,7 +2,7 @@
 import argparse
 import torch
 from torch.utils.data import DataLoader
-from network import build_model, CompositionNetwork
+from network import build_composition_model, CompositionNetwork
 from dataset import *
 import os
 import numpy as np
@@ -73,7 +73,7 @@ def test(args):
         #     continue
 
         with torch.no_grad():
-            batch_out = build_model(net, warp1_tensor, warp2_tensor, mask1_tensor, mask2_tensor)
+            batch_out = build_composition_model(net, warp1_tensor, warp2_tensor, mask1_tensor, mask2_tensor)
 
         stitched_image = batch_out['stitched_image']
         learned_mask1 = batch_out['learned_mask1']

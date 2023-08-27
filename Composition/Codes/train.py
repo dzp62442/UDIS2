@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import os
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from network import build_model, CompositionNetwork
+from network import build_composition_model, CompositionNetwork
 from dataset import CompositionTrainDataset
 import glob
 from loss import cal_boundary_term, cal_smooth_term_stitch, cal_smooth_term_diff
@@ -100,7 +100,7 @@ def train(args):
             # forward, backward, update weights
             optimizer.zero_grad()
 
-            batch_out = build_model(net,  warp1_tensor,  warp2_tensor, mask1_tensor, mask2_tensor)
+            batch_out = build_composition_model(net,  warp1_tensor,  warp2_tensor, mask1_tensor, mask2_tensor)
 
             learned_mask1 = batch_out['learned_mask1']
             learned_mask2 = batch_out['learned_mask2']

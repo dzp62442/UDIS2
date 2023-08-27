@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 
-def build_model(net, warp1_tensor, warp2_tensor, mask1_tensor, mask2_tensor):
+def build_composition_model(net, warp1_tensor, warp2_tensor, mask1_tensor, mask2_tensor):
 
     out  = net(warp1_tensor, warp2_tensor, mask1_tensor, mask2_tensor)
 
