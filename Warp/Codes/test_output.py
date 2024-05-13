@@ -9,17 +9,19 @@ from dataset import *
 import os
 import cv2
 from tqdm import tqdm
+import setproctitle
+from loguru import logger
 
 import grid_res
 grid_h = grid_res.GRID_H
 grid_w = grid_res.GRID_W
 
-last_path = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))
-MODEL_DIR = os.path.join(last_path, 'model')
+PROJ_ROOT = "/home/dongzhipeng/Projects/UDIS2"
+DATASET_ROOT = "/home/B_UserData/dongzhipeng/Datasets"
+MODEL_DIR = os.path.join(PROJ_ROOT, 'Warp/model/')
 
 
 def draw_mesh_on_warp(warp, f_local):
-
 
     point_color = (0, 255, 0) # BGR
     thickness = 2
@@ -58,6 +60,7 @@ def test(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     
     # dataset
+    print('<==================== Loading data ===================>\n')
     test_data = WarpTestDataset(data_path=args.test_path)
     #nl: set num_workers = the number of cpus
     test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)
@@ -84,7 +87,6 @@ def test(args):
 
     print("##################start testing#######################")
     # create folders if it dose not exist
-
     path_ave_fusion = args.test_path + 'ave_fusion/'
     if not os.path.exists(path_ave_fusion):
         os.makedirs(path_ave_fusion)
@@ -152,23 +154,18 @@ def test(args):
 
         torch.cuda.empty_cache()
 
-
-
-
     print("##################end testing#######################")
 
 
 if __name__=="__main__":
 
+    setproctitle.setproctitle("dongzhipeng_test")
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--batch_size', type=int, default=1)
-    # parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/UDIS-D/testing/')
-    parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/RealTractor2/testing/')
-
-
-    print('<==================== Loading data ===================>\n')
+    parser.add_argument('--test_path', type=str, default=os.path.join(DATASET_ROOT, 'UDIS-D/testing/'))
 
     args = parser.parse_args()
     print(args)

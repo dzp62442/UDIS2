@@ -1,3 +1,52 @@
+# 1 环境配置
+
+```shell
+conda create -n udis python=3.8
+conda activate udis
+pip install torch==1.10.1+cu113 torchvision==0.11.2+cu113 torchaudio==0.10.1 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+pip install -r requirements.txt  # 指定numpy版本，不能超过1.20
+```
+
+# 2 Warp
+
+## 2.1 训练
+
+设置 `Warp/Codes/train.py` 中的训练数据集路径
+  
+```shell
+python train_H.py
+```
+
+## 2.2 测试
+
+### 2.2.1 计算 PSNR/SSIM
+
+设置 `Warp/Codes/test.py` 中的测试数据集路径
+```shell
+python test.py -- gpu 0
+```
+
+### 2.2.2 Generate the warped images and corresponding masks
+
+设置 `Warp/Codes/test_output.py` 中的训练/测试数据集路径
+```shell
+python test_output.py -- gpu 0
+```
+变形后的图像、变形后图像掩码、平均融合结果均会保存在数据集路径下
+
+### 2.2.3 Test on other datasets
+
+When testing on other datasets with different scenes and resolutions, we apply the iterative warp adaption to get better alignment performance.
+
+Set the 'path/img1_name/img2_name' in Warp/Codes/test_other.py. (By default, both img1 and img2 are placed under 'path')
+```shell
+python test_other.py
+```
+The results before/after adaption will be generated and saved at 'path'.
+
+
+------
+
 # <p align="center">Parallax-Tolerant Unsupervised Deep Image Stitching (UDIS++ [paper](https://arxiv.org/abs/2302.08207))</p>
 <p align="center">Lang Nie*, Chunyu Lin*, Kang Liao*, Shuaicheng Liu`, Yao Zhao*</p>
 <p align="center">* Institute of Information Science, Beijing Jiaotong University</p>

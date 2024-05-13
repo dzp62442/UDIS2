@@ -10,10 +10,13 @@ import os
 import numpy as np
 import skimage
 import cv2
+import setproctitle
+from loguru import logger
 
 
-last_path = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))
-MODEL_DIR = os.path.join(last_path, 'model')
+PROJ_ROOT = "/home/dongzhipeng/Projects/UDIS2"
+DATASET_ROOT = "/home/B_UserData/dongzhipeng/Datasets"
+MODEL_DIR = os.path.join(PROJ_ROOT, 'Warp/model/')
 
 def create_gif(image_list, gif_name, duration=0.35):
     frames = []
@@ -29,6 +32,7 @@ def test(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     # dataset
+    print('<==================== Loading data ===================>')
     test_data = WarpTestDataset(data_path=args.test_path)
     test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)
 
@@ -48,9 +52,7 @@ def test(args):
     else:
         print('No checkpoint found!')
 
-
-
-    print("##################start testing#######################")
+    print("################## start testing #######################")
     psnr_list = []
     ssim_list = []
     net.eval()
@@ -102,19 +104,19 @@ def test(args):
     print("top 30~60%", np.mean(ssim_list_60))
     print("top 60~100%", np.mean(ssim_list_100))
     print('average ssim:', np.mean(ssim_list))
-    print("##################end testing#######################")
+    
+    print("################## end testing #######################")
 
 
 if __name__=="__main__":
+
+    setproctitle.setproctitle("dongzhipeng_test")
 
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--batch_size', type=int, default=1)
-    # parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/UDIS-D/testing/')
-    parser.add_argument('--test_path', type=str, default=last_path+'/../Dataset/RealTractor2/testing/')
-
-    print('<==================== Loading data ===================>\n')
+    parser.add_argument('--test_path', type=str, default=os.path.join(DATASET_ROOT, 'UDIS-D/testing/'))
 
     args = parser.parse_args()
     print(args)

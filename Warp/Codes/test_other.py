@@ -13,6 +13,7 @@ from network import get_stitched_result, WarpNetwork, build_new_ft_model
 import glob
 from loss import cal_lp_loss2
 import torchvision.transforms as T
+import setproctitle
 
 #import PIL
 resize_512 = T.Resize((512,512))
@@ -158,6 +159,8 @@ def train(args):
 
 
 if __name__=="__main__":
+
+    setproctitle.setproctitle("dongzhipeng_train")
 
 
     print('<==================== setting arguments ===================>\n')
