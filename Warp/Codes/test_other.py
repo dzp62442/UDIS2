@@ -16,7 +16,7 @@ import torchvision.transforms as T
 import setproctitle
 from loguru import logger
 
-PROJ_ROOT = "/home/dongzhipeng/Projects/UDIS2"
+PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir, os.path.pardir))  # UDIS2 项目文件夹
 DATASET_ROOT = "/home/B_UserData/dongzhipeng/Datasets"
 MODEL_DIR = os.path.join(PROJ_ROOT, 'Warp/model/')
 
