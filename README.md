@@ -14,7 +14,7 @@ pip install -r requirements.txt  # 指定numpy版本，不能超过1.20
 设置 `Warp/Codes/train.py` 中的训练数据集路径
   
 ```shell
-python train_H.py
+python train.py
 ```
 
 ## 2.2 测试

@@ -6,23 +6,20 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from network import build_model, WarpNetwork
 from dataset import WarpTrainDataset
-import glob
 from loss import cal_lp_loss, inter_grid_loss, intra_grid_loss
+import glob
+from loguru import logger
 
 
-
-last_path = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))
-# path to save the summary files
-SUMMARY_DIR = os.path.join(last_path, 'summary')
+PROJ_ROOT = "/home/dongzhipeng/Projects/UDIS2"
+DATASET_ROOT = "/home/B_UserData/dongzhipeng/Datasets"
+MODEL_DIR = os.path.join(PROJ_ROOT, 'Warp/model/')
+SUMMARY_DIR = os.path.join(PROJ_ROOT, 'Warp/summary')
 writer = SummaryWriter(log_dir=SUMMARY_DIR)
-# path to save the model files
-MODEL_DIR = os.path.join(last_path, 'model')
-# create folders if it dose not exist
 if not os.path.exists(MODEL_DIR):
     os.makedirs(MODEL_DIR)
 if not os.path.exists(SUMMARY_DIR):
     os.makedirs(SUMMARY_DIR)
-
 
 
 def train(args):
@@ -49,38 +46,35 @@ def train(args):
     if len(ckpt_list) != 0:
         model_path = ckpt_list[-1]
         checkpoint = torch.load(model_path)
-
         net.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         start_epoch = checkpoint['epoch']
         glob_iter = checkpoint['glob_iter']
         scheduler.last_epoch = start_epoch
-        print('load model from {}!'.format(model_path))
+        logger.info('load model from {} with start_epoch {}!'.format(model_path, start_epoch))
     else:
         start_epoch = 0
         glob_iter = 0
-        print('training from stratch!')
+        logger.info('training from stratch!')
 
 
-
-    print("##################start training#######################")
-    score_print_fre = 300
+    logger.info('<==================== start training ===================>')
+    score_print_fre = 10
 
     for epoch in range(start_epoch, args.max_epoch):
 
-        print("start epoch {}".format(epoch))
+        logger.info("start epoch {}".format(epoch))
         net.train()
         loss_sigma = 0.0
         overlap_loss_sigma = 0.
         nonoverlap_loss_sigma = 0.
 
-        print(epoch, 'lr={:.6f}'.format(optimizer.state_dict()['param_groups'][0]['lr']))
+        logger.info('epoch {}, lr={:.6f}'.format(epoch, optimizer.state_dict()['param_groups'][0]['lr']))
 
         for i, batch_value in enumerate(train_loader):
 
             inpu1_tesnor = batch_value[0].float()
             inpu2_tesnor = batch_value[1].float()
-
             if torch.cuda.is_available():
                 inpu1_tesnor = inpu1_tesnor.cuda()
                 inpu2_tesnor = inpu2_tesnor.cuda()
@@ -114,8 +108,6 @@ def train(args):
             nonoverlap_loss_sigma += nonoverlap_loss.item()
             loss_sigma += total_loss.item()
 
-            print(glob_iter)
-
             # record loss and images in tensorboard
             if i % score_print_fre == 0 and i != 0:
                 average_loss = loss_sigma / score_print_fre
@@ -125,7 +117,7 @@ def train(args):
                 overlap_loss_sigma = 0.
                 nonoverlap_loss_sigma = 0.
 
-                print("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f}  Overlap Loss: {:.4f}  Non-overlap Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
+                logger.info("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f}  Overlap Loss: {:.4f}  Non-overlap Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
                                           average_loss, average_overlap_loss, average_nonoverlap_loss, optimizer.state_dict()['param_groups'][0]['lr']))
                 # visualization
                 writer.add_image("inpu1", (inpu1_tesnor[0]+1.)/2., glob_iter)
@@ -147,28 +139,24 @@ def train(args):
             model_save_path = os.path.join(MODEL_DIR, filename)
             state = {'model': net.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch+1, "glob_iter": glob_iter}
             torch.save(state, model_save_path)
-    print("##################end training#######################")
+    
+    logger.info('<==================== end training ===================>')
 
 
 if __name__=="__main__":
 
+    logger.info('<==================== setting arguments ===================>')
 
-    print('<==================== setting arguments ===================>\n')
-
-    # create the argument parser
     parser = argparse.ArgumentParser()
 
-    # add arguments
-    parser.add_argument('--gpu', type=str, default='0')
+    parser.add_argument('--gpu', type=str, default='6')
     parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--max_epoch', type=int, default=100)
-    parser.add_argument('--train_path', type=str, default='/opt/data/private/nl/Data/UDIS-D/training/')
+    parser.add_argument('--max_epoch', type=int, default=200)
+    parser.add_argument('--train_path', type=str, default=os.path.join(DATASET_ROOT, 'UDIS-D/training/'))
 
-    # parse the arguments
     args = parser.parse_args()
     print(args)
 
-    # train
     train(args)
 
 

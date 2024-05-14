@@ -13,7 +13,7 @@ tensorboardX
 shapely==2.0.0
 einops
 cumm
-timm
+timm==0.4.9
 icecream
 h5py
 pyquaternion
@@ -23,3 +23,8 @@ python-lzf
 loguru
 tensorboard==2.9.0
 setproctitle
+setuptools==59.5.0
+protobuf==3.17.0
+pillow==9.1.1
+yacs==0.1.6
+torch-tb-profiler
