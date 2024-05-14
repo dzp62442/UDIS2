@@ -23,26 +23,25 @@ python train_H.py
 
 设置 `Warp/Codes/test.py` 中的测试数据集路径
 ```shell
-python test.py -- gpu 0
+python test.py --gpu 0
 ```
 
 ### 2.2.2 Generate the warped images and corresponding masks
 
 设置 `Warp/Codes/test_output.py` 中的训练/测试数据集路径
 ```shell
-python test_output.py -- gpu 0
+python test_output.py --gpu 0
 ```
 变形后的图像、变形后图像掩码、平均融合结果均会保存在数据集路径下
 
 ### 2.2.3 Test on other datasets
 
-When testing on other datasets with different scenes and resolutions, we apply the iterative warp adaption to get better alignment performance.
-
-Set the 'path/img1_name/img2_name' in Warp/Codes/test_other.py. (By default, both img1 and img2 are placed under 'path')
+当在不同场景和分辨率的其他数据集上进行测试时，应用迭代扭曲适应来微调预训练模型，获得更好的对齐性能。设置 `Warp/Codes/test_other.py` 中的 `path/img1_name` 和 `path/img2_name`，默认情况下，`img1` 和 `img2` 都放在 `path` 下
 ```shell
-python test_other.py
+python test_other.py --gpu 0
 ```
-The results before/after adaption will be generated and saved at 'path'.
+
+微调前后的结果保存在 `path` 下
 
 
 ------

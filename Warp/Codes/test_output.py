@@ -60,57 +60,44 @@ def test(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     
     # dataset
-    print('<==================== Loading data ===================>\n')
-    test_data = WarpTestDataset(data_path=args.test_path)
-    #nl: set num_workers = the number of cpus
-    test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)
+    logger.info('<==================== Loading data ===================>')
+    test_data = WarpTestDataset(data_path=args.test_path, use_resize=True)
+    test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)  # num_workers: the number of cpus
 
     # define the network
+    logger.info('<==================== Defining network ===================>')
     net = WarpNetwork()#build_model(args.model_name)
     if torch.cuda.is_available():
         net = net.cuda()
+    net.eval()
 
     #load the existing models if it exists
+    logger.info('<==================== Loading ckpt ===================>')
     ckpt_list = glob.glob(MODEL_DIR + "/*.pth")
     ckpt_list.sort()
     if len(ckpt_list) != 0:
         model_path = ckpt_list[-1]
-        #model_path = '/opt/data/private/nl/Repository/Unsupervised_Mesh_Stitching/UDISv2-88/UDISv2-Homo_TPS88-10grid_NO-res50-new3/model/epoch150_model.pth'
         checkpoint = torch.load(model_path)
-
         net.load_state_dict(checkpoint['model'])
-        print('load model from {}!'.format(model_path))
+        logger.info('load model from {}!'.format(model_path))
     else:
-        print('No checkpoint found!')
+        logger.warning('No checkpoint found!')
 
 
-
-    print("##################start testing#######################")
-    # create folders if it dose not exist
+    logger.info('<==================== start testing ===================>')
+    # 创建保存结果文件夹
     path_ave_fusion = args.test_path + 'ave_fusion/'
-    if not os.path.exists(path_ave_fusion):
-        os.makedirs(path_ave_fusion)
+    os.makedirs(path_ave_fusion, exist_ok=True)
     path_warp1 = args.test_path + 'warp1/'
-    if not os.path.exists(path_warp1):
-        os.makedirs(path_warp1)
+    os.makedirs(path_warp1, exist_ok=True)
     path_warp2 = args.test_path + 'warp2/'
-    if not os.path.exists(path_warp2):
-        os.makedirs(path_warp2)
+    os.makedirs(path_warp2, exist_ok=True)
     path_mask1 = args.test_path + 'mask1/'
-    if not os.path.exists(path_mask1):
-        os.makedirs(path_mask1)
+    os.makedirs(path_mask1, exist_ok=True)
     path_mask2 = args.test_path + 'mask2/'
-    if not os.path.exists(path_mask2):
-        os.makedirs(path_mask2)
+    os.makedirs(path_mask2, exist_ok=True)
 
-
-
-    net.eval()
     for i, batch_value in tqdm(enumerate(test_loader)):
-
-        #if i != 975:
-        #    continue
-
         inpu1_tesnor = batch_value[0].float()
         inpu2_tesnor = batch_value[1].float()
 
@@ -128,14 +115,12 @@ def test(args):
         final_mesh1 = batch_out['mesh1']
         final_mesh2 = batch_out['mesh2']
 
-
         final_warp1 = ((final_warp1[0]+1)*127.5).cpu().detach().numpy().transpose(1,2,0)
         final_warp2 = ((final_warp2[0]+1)*127.5).cpu().detach().numpy().transpose(1,2,0)
         final_warp1_mask = final_warp1_mask[0].cpu().detach().numpy().transpose(1,2,0)
         final_warp2_mask = final_warp2_mask[0].cpu().detach().numpy().transpose(1,2,0)
         final_mesh1 = final_mesh1[0].cpu().detach().numpy()
         final_mesh2 = final_mesh2[0].cpu().detach().numpy()
-
 
         path = path_warp1 + str(i+1).zfill(6) + ".jpg"
         cv2.imwrite(path, final_warp1)
@@ -163,9 +148,9 @@ if __name__=="__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--gpu', type=str, default='0')
+    parser.add_argument('--gpu', type=str, default='5')
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--test_path', type=str, default=os.path.join(DATASET_ROOT, 'UDIS-D/testing/'))
+    parser.add_argument('--test_path', type=str, default=os.path.join(DATASET_ROOT, 'MiniTank1/testing/'))
 
     args = parser.parse_args()
     print(args)

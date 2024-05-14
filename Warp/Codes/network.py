@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import cv2
 import numpy as np
 import torchvision.models as models
+from loguru import logger
 
 import torchvision.transforms as T
 resize_512 = T.Resize((512,512))
@@ -50,7 +51,7 @@ def draw_mesh_on_warp(warp, f_local):
     return warp
 
 
-#Covert global homo into mesh
+# 对rigid_mesh应用全局单应矩阵变换
 def H2Mesh(H, rigid_mesh):
 
     H_inv = torch.inverse(H)
@@ -290,13 +291,13 @@ def get_stitched_result(input1_tensor, input2_tensor, rigid_mesh, mesh):
 def build_output_model(net, input1_tensor, input2_tensor):
     batch_size, _, img_h, img_w = input1_tensor.size()
 
-    resized_input1 = resize_512(input1_tensor)
-    resized_input2 = resize_512(input2_tensor)
-    H_motion, mesh_motion = net(resized_input1, resized_input2)
+    # resized_input1 = resize_512(input1_tensor)
+    # resized_input2 = resize_512(input2_tensor)
+    H_motion, mesh_motion = net(input1_tensor, input2_tensor)  # 在 dataset 加载数据中进行 resize
 
-    H_motion = H_motion.reshape(-1, 4, 2)
-    H_motion = torch.stack([H_motion[...,0]*img_w/512, H_motion[...,1]*img_h/512], 2)
-    mesh_motion = mesh_motion.reshape(-1, grid_h+1, grid_w+1, 2)
+    H_motion = H_motion.reshape(-1, 4, 2)  # 由1*8的二维向量变为1*4*2的三维向量
+    H_motion = torch.stack([H_motion[...,0]*img_w/512, H_motion[...,1]*img_h/512], 2)  # H_motion[...,0]为第0列，H_motion[...,1]为第1列，单独取出来缩放后再堆叠出去
+    mesh_motion = mesh_motion.reshape(-1, grid_h+1, grid_w+1, 2)  # 由1*338的二维向量变为1*13*13*2的四维向量
     mesh_motion = torch.stack([mesh_motion[...,0]*img_w/512, mesh_motion[...,1]*img_h/512], 3)
 
     # initialize the source points bs x 4 x 2
@@ -310,10 +311,11 @@ def build_output_model(net, input1_tensor, input2_tensor):
     H = torch_DLT.tensor_DLT(src_p, dst_p)
 
 
-    rigid_mesh = get_rigid_mesh(batch_size, img_h, img_w)
-    ini_mesh = H2Mesh(H, rigid_mesh)
-    mesh = ini_mesh + mesh_motion
+    rigid_mesh = get_rigid_mesh(batch_size, img_h, img_w)  # 划分网格，1*13*13*2的四维向量
+    ini_mesh = H2Mesh(H, rigid_mesh)  # 应用全局单应变换
+    mesh = ini_mesh + mesh_motion  # 叠加每个网格顶点的运动
 
+    # 确定拼接结果的画布尺寸
     width_max = torch.max(mesh[...,0])
     width_max = torch.maximum(torch.tensor(img_w).cuda(), width_max)
     width_min = torch.min(mesh[...,0])
@@ -328,7 +330,7 @@ def build_output_model(net, input1_tensor, input2_tensor):
     #print(out_width)
     #print(out_height)
 
-    # get warped img1
+    # 处理img1，不进行变形，只应用缩放和平移矩阵
     M_tensor = torch.tensor([[out_width / 2.0, 0., out_width / 2.0],
                       [0., out_height / 2.0, out_height / 2.0],
                       [0., 0., 1.]])
@@ -352,7 +354,8 @@ def build_output_model(net, input1_tensor, input2_tensor):
     homo_output = torch_homo_transform.transformer(torch.cat((input1_tensor+1, mask), 1), I_mat, (out_height.int(), out_width.int()))
 
     torch.cuda.empty_cache()
-    # get warped img2
+    
+    # 处理img2，应用网格和TPS变形
     mesh_trans = torch.stack([mesh[...,0]-width_min, mesh[...,1]-height_min], 3)
     norm_rigid_mesh = get_norm_mesh(rigid_mesh, img_h, img_w)
     norm_mesh = get_norm_mesh(mesh_trans, out_height, out_width)
@@ -369,6 +372,7 @@ def build_output_model(net, input1_tensor, input2_tensor):
 # define and forward
 class WarpNetwork(nn.Module):
 
+    # 网络由两部分组成：regressNet1和regressNet2，每个部分又分为卷积部分(part1)和全连接部分(part2)
     def __init__(self):
         super(WarpNetwork, self).__init__()
 
@@ -440,22 +444,24 @@ class WarpNetwork(nn.Module):
 
         )
 
-
+        # 权重初始化
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
+            if isinstance(m, nn.Conv2d):  # 所有卷积层使用Kaiming Normal初始化方法
                 nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, nn.BatchNorm2d):
+            elif isinstance(m, nn.BatchNorm2d):  # 批量归一化层(nn.BatchNorm2d)设置其权重为1，偏置为0
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-        ssl._create_default_https_context = ssl._create_unverified_context
-        resnet50_model = models.resnet.resnet50(pretrained=True)
-
+        ssl._create_default_https_context = ssl._create_unverified_context  # 解决SSL证书验证问题的临时方案，确保下载预训练模型时不会因SSL验证失败而中断
+        resnet50_model = models.resnet.resnet50(pretrained=True)  # 加载预训练的ResNet50模型，作为特征提取的基础
         if torch.cuda.is_available():
             resnet50_model = resnet50_model.cuda()
+        
+        # 从ResNet50模型中获取特定阶段的特征图提取器
         self.feature_extractor_stage1, self.feature_extractor_stage2 = self.get_res50_FeatureMap(resnet50_model)
         #-----------------------------------------
 
+    # 从预训练的ResNet50模型中提取特定的特征层，用于构建两个独立的特征提取器
     def get_res50_FeatureMap(self, resnet50_model):
 
         layers_list = []
@@ -467,8 +473,10 @@ class WarpNetwork(nn.Module):
         layers_list.append(resnet50_model.layer1)
         layers_list.append(resnet50_model.layer2)
 
+        # 较低级特征提取
         feature_extractor_stage1 = nn.Sequential(*layers_list)
 
+        # 较高级特征提取
         feature_extractor_stage2 = nn.Sequential(resnet50_model.layer3)
 
         #layers_list.append(resnet50_model.layer3)
@@ -488,24 +496,27 @@ class WarpNetwork(nn.Module):
         correlation_32 = self.CCL(feature_1_32, feature_2_32)
         temp_1 = self.regressNet1_part1(correlation_32)
         temp_1 = temp_1.view(temp_1.size()[0], -1)
-        offset_1 = self.regressNet1_part2(temp_1)
-        H_motion_1 = offset_1.reshape(-1, 4, 2)
+        offset_1 = self.regressNet1_part2(temp_1)  # offset_1为输出的H_motion
+        H_motion_1 = offset_1.reshape(-1, 4, 2)  # 三维张量，形状1*4*2
 
 
-        src_p = torch.tensor([[0., 0.], [img_w, 0.], [0., img_h], [img_w, img_h]])
+        src_p = torch.tensor([[0., 0.], [img_w, 0.], [0., img_h], [img_w, img_h]])  # 完整图像左上右上左下右下四个顶点
         if torch.cuda.is_available():
             src_p = src_p.cuda()
-        src_p = src_p.unsqueeze(0).expand(batch_size, -1, -1)
-        dst_p = src_p + H_motion_1
-        H = torch_DLT.tensor_DLT(src_p/8, dst_p/8)
+        src_p = src_p.unsqueeze(0).expand(batch_size, -1, -1)  # 转换成三维，形状1*4*2
+        dst_p = src_p + H_motion_1  # 四个图像顶点的全局运动
+        H = torch_DLT.tensor_DLT(src_p/8, dst_p/8)  # 通过DLT求解H矩阵，3维张量，形状1*3*3，最后一个元素为1
 
+        # 仿射变换矩阵M，将图像的宽和高分别缩小到原来的1/8，并将图像中心移动到原点
         M_tensor = torch.tensor([[img_w/8 / 2.0, 0., img_w/8 / 2.0],
                       [0., img_h/8 / 2.0, img_h/8 / 2.0],
                       [0., 0., 1.]])
-
         if torch.cuda.is_available():
             M_tensor = M_tensor.cuda()
 
+        # 首先，通过M_tile_inv将原始坐标变换到计算H时所使用的统一缩放和平移坐标系。
+        # 然后，应用单应性变换H，实现图像间的透视变换。
+        # 最后，通过M_tile将变换结果转换回原始图像坐标系，使得变换后的图像能够正确地对齐到原始图像的坐标系统中
         M_tile = M_tensor.unsqueeze(0).expand(batch_size, -1, -1)
         M_tensor_inv = torch.inverse(M_tensor)
         M_tile_inv = M_tensor_inv.unsqueeze(0).expand(batch_size, -1, -1)
@@ -517,8 +528,7 @@ class WarpNetwork(nn.Module):
         correlation_64 = self.CCL(feature_1_64, warp_feature_2_64)
         temp_2 = self.regressNet2_part1(correlation_64)
         temp_2 = temp_2.view(temp_2.size()[0], -1)
-        offset_2 = self.regressNet2_part2(temp_2)
-
+        offset_2 = self.regressNet2_part2(temp_2)  # offset_为输出的Mesh_motion
 
         return offset_1, offset_2
 

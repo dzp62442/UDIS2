@@ -14,6 +14,11 @@ import glob
 from loss import cal_lp_loss2
 import torchvision.transforms as T
 import setproctitle
+from loguru import logger
+
+PROJ_ROOT = "/home/dongzhipeng/Projects/UDIS2"
+DATASET_ROOT = "/home/B_UserData/dongzhipeng/Datasets"
+MODEL_DIR = os.path.join(PROJ_ROOT, 'Warp/model/')
 
 #import PIL
 resize_512 = T.Resize((512,512))
@@ -38,16 +43,6 @@ def loadSingleData(data_path, img1_name, img2_name):
     input2_tensor = torch.tensor(input2).unsqueeze(0)
     return (input1_tensor, input2_tensor)
 
-
-
-# path of project
-#nl: os.path.dirname("__file__") ----- the current absolute path
-#nl: os.path.pardir ---- the last path
-last_path = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))
-
-
-#nl: path to save the model files
-MODEL_DIR = os.path.join(last_path, 'model')
 
 #nl: create folders if it dose not exist
 if not os.path.exists(MODEL_DIR):
@@ -79,10 +74,10 @@ def train(args):
         optimizer.load_state_dict(checkpoint['optimizer'])
         start_epoch = checkpoint['epoch']
         scheduler.last_epoch = start_epoch
-        print('load model from {}!'.format(model_path))
+        logger.info('load model from {}!'.format(model_path))
     else:
         start_epoch = 0
-        print('training from stratch!')
+        logger.info('training from stratch!')
 
     # load dataset(only one pair of images)
     input1_tensor, input2_tensor = loadSingleData(data_path=args.path, img1_name = args.img1_name, img2_name = args.img2_name)
@@ -95,7 +90,7 @@ def train(args):
 
     loss_list = []
 
-    print("##################start iteration#######################")
+    logger.info('<==================== start iteration ===================>')
     for epoch in range(start_epoch, start_epoch + args.max_iter):
         net.train()
 
@@ -114,7 +109,7 @@ def train(args):
         optimizer.step()
 
         current_iter = epoch-start_epoch+1
-        print("Training: Iteration[{:0>3}/{:0>3}] Total Loss: {:.4f} lr={:.8f}".format(current_iter, args.max_iter, total_loss, optimizer.state_dict()['param_groups'][0]['lr']))
+        logger.info("Training: Iteration[{:0>3}/{:0>3}] Total Loss: {:.4f} lr={:.8f}".format(current_iter, args.max_iter, total_loss, optimizer.state_dict()['param_groups'][0]['lr']))
 
 
         loss_list.append(total_loss)
@@ -155,7 +150,8 @@ def train(args):
 
         scheduler.step()
 
-    print("##################end iteration#######################")
+    logger.info('<==================== end iteration ===================>')
+    
 
 
 if __name__=="__main__":
@@ -163,23 +159,22 @@ if __name__=="__main__":
     setproctitle.setproctitle("dongzhipeng_train")
 
 
-    print('<==================== setting arguments ===================>\n')
+    logger.info('<==================== setting arguments ===================>')
 
     #nl: create the argument parser
     parser = argparse.ArgumentParser()
 
     #nl: add arguments
-    parser.add_argument('--gpu', type=str, default='0')
+    parser.add_argument('--gpu', type=str, default='5')
     parser.add_argument('--max_iter', type=int, default=50)
-    parser.add_argument('--path', type=str, default='../../Carpark-DHW/')
-    parser.add_argument('--img1_name', type=str, default='input1.jpg')
-    parser.add_argument('--img2_name', type=str, default='input2.jpg')
+    # parser.add_argument('--path', type=str, default='../../Carpark-DHW/')
+    parser.add_argument('--path', type=str, default=os.path.join(DATASET_ROOT, 'MiniTank1/testing/'))
+    parser.add_argument('--img1_name', type=str, default='input1/000005.jpg')
+    parser.add_argument('--img2_name', type=str, default='input2/000005.jpg')
 
-    #nl: parse the arguments
     args = parser.parse_args()
     print(args)
 
-    #nl: rain
     train(args)
 
 
