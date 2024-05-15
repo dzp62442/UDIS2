@@ -120,6 +120,77 @@ def data_aug(img1, img2):
 
     return img1_aug, img2_aug
 
+# for multi train.py / test.py
+def build_model(net, input_tensors, is_training=True):
+    batch_size, _, img_h, img_w = input_tensors[0].size()
+
+    # network
+    if is_training == True:
+        # aug_input1_tensor, aug_input2_tensor = data_aug(input1_tensor, input2_tensor)
+        H_motions, mesh_motions, tar_ids = net(input_tensors)
+    else:
+        H_motions, mesh_motions, tar_ids = net(input_tensors)
+
+    out_dicts = []
+    for i, tar in enumerate(tar_ids):
+        H_motions[i] = H_motions[i].reshape(-1, 4, 2)
+        mesh_motions[i] = mesh_motions[i].reshape(-1, grid_h+1, grid_w+1, 2)
+
+        # initialize the source points bs x 4 x 2
+        src_p = torch.tensor([[0., 0.], [img_w, 0.], [0., img_h], [img_w, img_h]])
+        if torch.cuda.is_available():
+            src_p = src_p.cuda()
+        src_p = src_p.unsqueeze(0).expand(batch_size, -1, -1)
+        # target points
+        dst_p = src_p + H_motions[i]
+        # solve homo using DLT
+        H = torch_DLT.tensor_DLT(src_p, dst_p)
+
+        M_tensor = torch.tensor([[img_w / 2.0, 0., img_w / 2.0],
+                        [0., img_h / 2.0, img_h / 2.0],
+                        [0., 0., 1.]])
+
+        if torch.cuda.is_available():
+            M_tensor = M_tensor.cuda()
+
+        M_tile = M_tensor.unsqueeze(0).expand(batch_size, -1, -1)
+        M_tensor_inv = torch.inverse(M_tensor)
+        M_tile_inv = M_tensor_inv.unsqueeze(0).expand(batch_size, -1, -1)
+        H_mat = torch.matmul(torch.matmul(M_tile_inv, H), M_tile)
+
+        mask = torch.ones_like(input_tensors[tar])
+        if torch.cuda.is_available():
+            mask = mask.cuda()
+        output_H = torch_homo_transform.transformer(torch.cat((input_tensors[tar], mask), 1), H_mat, (img_h, img_w))
+
+        H_inv_mat = torch.matmul(torch.matmul(M_tile_inv, torch.inverse(H)), M_tile)
+        output_H_inv = torch_homo_transform.transformer(torch.cat((input_tensors[1], mask), 1), H_inv_mat, (img_h, img_w))
+
+        rigid_mesh = get_rigid_mesh(batch_size, img_h, img_w)
+        ini_mesh = H2Mesh(H, rigid_mesh)
+        mesh = ini_mesh + mesh_motions[i]
+
+        norm_rigid_mesh = get_norm_mesh(rigid_mesh, img_h, img_w)
+        norm_mesh = get_norm_mesh(mesh, img_h, img_w)
+
+        output_tps = torch_tps_transform.transformer(torch.cat((input_tensors[tar], mask), 1), norm_mesh, norm_rigid_mesh, (img_h, img_w))
+        warp_mesh = output_tps[:,0:3,...]
+        warp_mesh_mask = output_tps[:,3:6,...]
+
+        # calculate the overlapping regions to apply shape-preserving constraints
+        overlap = torch_tps_transform.transformer(warp_mesh_mask, norm_rigid_mesh, norm_mesh, (img_h, img_w))
+        overlap = overlap.permute(0, 2, 3, 1).unfold(1, int(img_h/grid_h), int(img_h/grid_h)).unfold(2, int(img_w/grid_w), int(img_w/grid_w))
+        overlap = torch.mean(overlap.reshape(batch_size, grid_h, grid_w, -1), 3)
+        overlap_one = torch.ones_like(overlap)
+        overlap_zero = torch.zeros_like(overlap)
+        overlap = torch.where(overlap<0.9, overlap_one, overlap_zero)
+
+        out_dict = {}
+        out_dict.update(output_H=output_H, output_H_inv = output_H_inv, warp_mesh = warp_mesh, warp_mesh_mask = warp_mesh_mask, mesh1 = rigid_mesh, mesh2 = mesh, overlap = overlap)
+        out_dicts.append(out_dict)
+
+    return out_dicts, tar_ids
+
 
 # for train.py / test.py
 def build_model(net, input1_tensor, input2_tensor, is_training = True):
@@ -373,8 +444,9 @@ def build_output_model(net, input1_tensor, input2_tensor):
 class MultiWarpNetwork(nn.Module):
 
     # 网络由两部分组成：regressNet1和regressNet2，每个部分又分为卷积部分(part1)和全连接部分(part2)
-    def __init__(self):
+    def __init__(self, input_img_num: int):
         super(MultiWarpNetwork, self).__init__()
+        self.input_img_num = input_img_num
 
         self.regressNet1_part1 = nn.Sequential(
             nn.Conv2d(2, 64, kernel_size=3, padding=1, bias=False),
@@ -483,54 +555,65 @@ class MultiWarpNetwork(nn.Module):
 
         return feature_extractor_stage1, feature_extractor_stage2
 
-    # forward
-    def forward(self, input1_tesnor, input2_tesnor):
-        batch_size, _, img_h, img_w = input1_tesnor.size()
+    # multi forward
+    def forward(self, input_tensors):
+        batch_size, _, img_h, img_w = input_tensors[0].size()
 
-        feature_1_64 = self.feature_extractor_stage1(input1_tesnor)
-        feature_1_32 = self.feature_extractor_stage2(feature_1_64)
-        feature_2_64 = self.feature_extractor_stage1(input2_tesnor)
-        feature_2_32 = self.feature_extractor_stage2(feature_2_64)
+        # 提取所有输入图像的特征
+        features_64, features_32 = [], []
+        for i in range(self.input_img_num):
+            features_64.append(self.feature_extractor_stage1(input_tensors[i]))
+            features_32.append(self.feature_extractor_stage2(features_64[i]))
 
-        ######### stage 1
-        correlation_32 = self.CCL(feature_1_32, feature_2_32)
-        temp_1 = self.regressNet1_part1(correlation_32)
-        temp_1 = temp_1.view(temp_1.size()[0], -1)
-        offset_1 = self.regressNet1_part2(temp_1)  # offset_1为输出的H_motion
-        H_motion_1 = offset_1.reshape(-1, 4, 2)  # 三维张量，形状1*4*2
+        assert self.input_img_num == 3, "Only support 3 input images now!"  #TODO: 目前仅支持3张输入图像
+        
+        out_H_motions, out_mesh_motions, tar_ids = [], [], []
+        for i in range(self.input_img_num-1):
+            ref, tar = 1, i  # 选择1为参考图像，i为目标图像
+            if ref == tar:
+                continue
+            tar_ids.append(tar)
 
+            ######### stage 1
+            correlation_32 = self.CCL(features_32[ref], features_32[tar])
+            temp_1 = self.regressNet1_part1(correlation_32)
+            temp_1 = temp_1.view(temp_1.size()[0], -1)
+            offset_1 = self.regressNet1_part2(temp_1)  # offset_1为输出的H_motion
+            H_motion_1 = offset_1.reshape(-1, 4, 2)  # 三维张量，形状1*4*2
+            out_H_motions.append(offset_1)
 
-        src_p = torch.tensor([[0., 0.], [img_w, 0.], [0., img_h], [img_w, img_h]])  # 完整图像左上右上左下右下四个顶点
-        if torch.cuda.is_available():
-            src_p = src_p.cuda()
-        src_p = src_p.unsqueeze(0).expand(batch_size, -1, -1)  # 转换成三维，形状1*4*2
-        dst_p = src_p + H_motion_1  # 四个图像顶点的全局运动
-        H = torch_DLT.tensor_DLT(src_p/8, dst_p/8)  # 通过DLT求解H矩阵，3维张量，形状1*3*3，最后一个元素为1
+            src_p = torch.tensor([[0., 0.], [img_w, 0.], [0., img_h], [img_w, img_h]])  # 完整图像左上右上左下右下四个顶点
+            if torch.cuda.is_available():
+                src_p = src_p.cuda()
+            src_p = src_p.unsqueeze(0).expand(batch_size, -1, -1)  # 转换成三维，形状1*4*2
+            dst_p = src_p + H_motion_1  # 四个图像顶点的全局运动
+            H = torch_DLT.tensor_DLT(src_p/8, dst_p/8)  # 通过DLT求解H矩阵，3维张量，形状1*3*3，最后一个元素为1
 
-        # 仿射变换矩阵M，将图像的宽和高分别缩小到原来的1/8，并将图像中心移动到原点
-        M_tensor = torch.tensor([[img_w/8 / 2.0, 0., img_w/8 / 2.0],
-                      [0., img_h/8 / 2.0, img_h/8 / 2.0],
-                      [0., 0., 1.]])
-        if torch.cuda.is_available():
-            M_tensor = M_tensor.cuda()
+            # 仿射变换矩阵M，将图像的宽和高分别缩小到原来的1/8，并将图像中心移动到原点
+            M_tensor = torch.tensor([[img_w/8 / 2.0, 0., img_w/8 / 2.0],
+                        [0., img_h/8 / 2.0, img_h/8 / 2.0],
+                        [0., 0., 1.]])
+            if torch.cuda.is_available():
+                M_tensor = M_tensor.cuda()
 
-        # 首先，通过M_tile_inv将原始坐标变换到计算H时所使用的统一缩放和平移坐标系。
-        # 然后，应用单应性变换H，实现图像间的透视变换。
-        # 最后，通过M_tile将变换结果转换回原始图像坐标系，使得变换后的图像能够正确地对齐到原始图像的坐标系统中
-        M_tile = M_tensor.unsqueeze(0).expand(batch_size, -1, -1)
-        M_tensor_inv = torch.inverse(M_tensor)
-        M_tile_inv = M_tensor_inv.unsqueeze(0).expand(batch_size, -1, -1)
-        H_mat = torch.matmul(torch.matmul(M_tile_inv, H), M_tile)
+            # 首先，通过M_tile_inv将原始坐标变换到计算H时所使用的统一缩放和平移坐标系。
+            # 然后，应用单应性变换H，实现图像间的透视变换。
+            # 最后，通过M_tile将变换结果转换回原始图像坐标系，使得变换后的图像能够正确地对齐到原始图像的坐标系统中
+            M_tile = M_tensor.unsqueeze(0).expand(batch_size, -1, -1)
+            M_tensor_inv = torch.inverse(M_tensor)
+            M_tile_inv = M_tensor_inv.unsqueeze(0).expand(batch_size, -1, -1)
+            H_mat = torch.matmul(torch.matmul(M_tile_inv, H), M_tile)
 
-        warp_feature_2_64 = torch_homo_transform.transformer(feature_2_64, H_mat, (int(img_h/8), int(img_w/8)))
+            warp_feature_64_tar = torch_homo_transform.transformer(features_64[tar], H_mat, (int(img_h/8), int(img_w/8)))
 
-        ######### stage 2
-        correlation_64 = self.CCL(feature_1_64, warp_feature_2_64)
-        temp_2 = self.regressNet2_part1(correlation_64)
-        temp_2 = temp_2.view(temp_2.size()[0], -1)
-        offset_2 = self.regressNet2_part2(temp_2)  # offset_为输出的Mesh_motion
+            ######### stage 2
+            correlation_64 = self.CCL(features_64[ref], warp_feature_64_tar)
+            temp_2 = self.regressNet2_part1(correlation_64)
+            temp_2 = temp_2.view(temp_2.size()[0], -1)
+            offset_2 = self.regressNet2_part2(temp_2)  # offset_为输出的Mesh_motion
+            out_mesh_motions.append(offset_2)
 
-        return offset_1, offset_2
+        return out_H_motions, out_mesh_motions, tar_ids
 
 
     def extract_patches(self, x, kernel=3, stride=1):

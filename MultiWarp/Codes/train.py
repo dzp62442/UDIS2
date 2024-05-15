@@ -32,7 +32,7 @@ def train(args):
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
 
     # TODO define the network
-    net = MultiWarpNetwork()
+    net = MultiWarpNetwork(input_img_num=args.input_img_num)
     if torch.cuda.is_available():
         net = net.cuda()
 
@@ -82,67 +82,60 @@ def train(args):
 
             # forward, backward, update weights
             optimizer.zero_grad()
+            out_dicts, tar_ids = build_model(net, input_tensors)
 
+            total_loss = 0
+            for i, tar in enumerate(tar_ids):
+                # result
+                output_H = out_dicts[i]['output_H']
+                output_H_inv = out_dicts[i]['output_H_inv']
+                warp_mesh = out_dicts[i]['warp_mesh']
+                warp_mesh_mask = out_dicts[i]['warp_mesh_mask']
+                mesh1 = out_dicts[i]['mesh1']
+                mesh2 = out_dicts[i]['mesh2']
+                overlap = out_dicts[i]['overlap']
 
+                # calculate loss for overlapping regions
+                overlap_loss = cal_lp_loss(input_tensors[1], input_tensors[tar], output_H, output_H_inv, warp_mesh, warp_mesh_mask)
+                # calculate loss for non-overlapping regions
+                nonoverlap_loss = 10*inter_grid_loss(overlap, mesh2) + 10*intra_grid_loss(mesh2)
 
-
-            #! --------------------------------------------------------------
-
-            inpu1_tesnor = batch_value[0].float()
-            inpu2_tesnor = batch_value[1].float()
-            if torch.cuda.is_available():
-                inpu1_tesnor = inpu1_tesnor.cuda()
-                inpu2_tesnor = inpu2_tesnor.cuda()
-
-            # forward, backward, update weights
-            optimizer.zero_grad()
-
-            batch_out = build_model(net, inpu1_tesnor, inpu2_tesnor)
-            # result
-            output_H = batch_out['output_H']
-            output_H_inv = batch_out['output_H_inv']
-            warp_mesh = batch_out['warp_mesh']
-            warp_mesh_mask = batch_out['warp_mesh_mask']
-            mesh1 = batch_out['mesh1']
-            mesh2 = batch_out['mesh2']
-            overlap = batch_out['overlap']
-
-            # calculate loss for overlapping regions
-            overlap_loss = cal_lp_loss(inpu1_tesnor, inpu2_tesnor, output_H, output_H_inv, warp_mesh, warp_mesh_mask)
-            # calculate loss for non-overlapping regions
-            nonoverlap_loss = 10*inter_grid_loss(overlap, mesh2) + 10*intra_grid_loss(mesh2)
-
-            total_loss = overlap_loss + nonoverlap_loss
+                total_loss += overlap_loss + nonoverlap_loss
             total_loss.backward()
 
             # clip the gradient
             torch.nn.utils.clip_grad_norm_(net.parameters(), max_norm=3, norm_type=2)
             optimizer.step()
 
-            overlap_loss_sigma += overlap_loss.item()
-            nonoverlap_loss_sigma += nonoverlap_loss.item()
+            # overlap_loss_sigma += overlap_loss.item()
+            # nonoverlap_loss_sigma += nonoverlap_loss.item()
             loss_sigma += total_loss.item()
 
             # record loss and images in tensorboard
             if i % score_print_fre == 0 and i != 0:
                 average_loss = loss_sigma / score_print_fre
-                average_overlap_loss = overlap_loss_sigma/ score_print_fre
-                average_nonoverlap_loss = nonoverlap_loss_sigma/ score_print_fre
+                # average_overlap_loss = overlap_loss_sigma/ score_print_fre
+                # average_nonoverlap_loss = nonoverlap_loss_sigma/ score_print_fre
                 loss_sigma = 0.0
                 overlap_loss_sigma = 0.
                 nonoverlap_loss_sigma = 0.
 
-                logger.info("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f}  Overlap Loss: {:.4f}  Non-overlap Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
-                                          average_loss, average_overlap_loss, average_nonoverlap_loss, optimizer.state_dict()['param_groups'][0]['lr']))
+                # logger.info("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f}  Overlap Loss: {:.4f}  Non-overlap Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
+                #                           average_loss, average_overlap_loss, average_nonoverlap_loss, optimizer.state_dict()['param_groups'][0]['lr']))
+                logger.info("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
+                                          average_loss, optimizer.state_dict()['param_groups'][0]['lr']))
+
+                
                 # visualization
-                writer.add_image("inpu1", (inpu1_tesnor[0]+1.)/2., glob_iter)
-                writer.add_image("inpu2", (inpu2_tesnor[0]+1.)/2., glob_iter)
+                writer.add_image("input0", (input_tensors[0][0]+1.)/2., glob_iter)
+                writer.add_image("input1", (input_tensors[1][0]+1.)/2., glob_iter)
+                writer.add_image("input2", (input_tensors[2][0]+1.)/2., glob_iter)
                 writer.add_image("warp_H", (output_H[0,0:3,:,:]+1.)/2., glob_iter)
                 writer.add_image("warp_mesh", (warp_mesh[0]+1.)/2., glob_iter)
                 writer.add_scalar('lr', optimizer.state_dict()['param_groups'][0]['lr'], glob_iter)
                 writer.add_scalar('total loss', average_loss, glob_iter)
-                writer.add_scalar('overlap loss', average_overlap_loss, glob_iter)
-                writer.add_scalar('nonoverlap loss', average_nonoverlap_loss, glob_iter)
+                # writer.add_scalar('overlap loss', average_overlap_loss, glob_iter)
+                # writer.add_scalar('nonoverlap loss', average_nonoverlap_loss, glob_iter)
 
             glob_iter += 1
 
