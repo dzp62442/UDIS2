@@ -9,6 +9,7 @@ from dataset import MultiWarpTrainDataset
 from loss import cal_lp_loss, inter_grid_loss, intra_grid_loss
 import glob
 from loguru import logger
+import setproctitle
 
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))  # UDIS2/MultiWarp 文件夹
@@ -85,15 +86,15 @@ def train(args):
             out_dicts, tar_ids = build_model(net, input_tensors)
 
             total_loss = 0
-            for i, tar in enumerate(tar_ids):
+            for j, tar in enumerate(tar_ids):
                 # result
-                output_H = out_dicts[i]['output_H']
-                output_H_inv = out_dicts[i]['output_H_inv']
-                warp_mesh = out_dicts[i]['warp_mesh']
-                warp_mesh_mask = out_dicts[i]['warp_mesh_mask']
-                mesh1 = out_dicts[i]['mesh1']
-                mesh2 = out_dicts[i]['mesh2']
-                overlap = out_dicts[i]['overlap']
+                output_H = out_dicts[j]['output_H']
+                output_H_inv = out_dicts[j]['output_H_inv']
+                warp_mesh = out_dicts[j]['warp_mesh']
+                warp_mesh_mask = out_dicts[j]['warp_mesh_mask']
+                mesh1 = out_dicts[j]['mesh1']
+                mesh2 = out_dicts[j]['mesh2']
+                overlap = out_dicts[j]['overlap']
 
                 # calculate loss for overlapping regions
                 overlap_loss = cal_lp_loss(input_tensors[1], input_tensors[tar], output_H, output_H_inv, warp_mesh, warp_mesh_mask)
@@ -142,7 +143,7 @@ def train(args):
 
         scheduler.step()
         # save model
-        if ((epoch+1) % 10 == 0 or (epoch+1)==args.max_epoch):
+        if ((epoch+1) % 5 == 0 or (epoch+1)==args.max_epoch):
             filename ='epoch' + str(epoch+1).zfill(3) + '_model.pth'
             model_save_path = os.path.join(MODEL_DIR, filename)
             state = {'model': net.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch+1, "glob_iter": glob_iter}
@@ -155,9 +156,11 @@ if __name__=="__main__":
 
     logger.info('<==================== setting arguments ===================>')
 
+    setproctitle.setproctitle("dongzhipeng_train")
+    
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--gpu', type=str, default='0')
+    parser.add_argument('--gpu', type=str, default='5')
     parser.add_argument('--input_img_num', type=int, default=3)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--max_epoch', type=int, default=200)
