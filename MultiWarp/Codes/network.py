@@ -370,11 +370,11 @@ def build_output_model(net, input1_tensor, input2_tensor):
 
 
 # define and forward
-class WarpNetwork(nn.Module):
+class MultiWarpNetwork(nn.Module):
 
     # 网络由两部分组成：regressNet1和regressNet2，每个部分又分为卷积部分(part1)和全连接部分(part2)
     def __init__(self):
-        super(WarpNetwork, self).__init__()
+        super(MultiWarpNetwork, self).__init__()
 
         self.regressNet1_part1 = nn.Sequential(
             nn.Conv2d(2, 64, kernel_size=3, padding=1, bias=False),

@@ -4,17 +4,17 @@ from torch.utils.data import DataLoader
 import os
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from network import build_model, WarpNetwork
-from dataset import WarpTrainDataset
+from network import build_model, MultiWarpNetwork
+from dataset import MultiWarpTrainDataset
 from loss import cal_lp_loss, inter_grid_loss, intra_grid_loss
 import glob
 from loguru import logger
 
 
-PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir, os.path.pardir))  # UDIS2 项目文件夹
+PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))  # UDIS2/MultiWarp 文件夹
 DATASET_ROOT = "/home/B_UserData/dongzhipeng/Datasets"
-MODEL_DIR = os.path.join(PROJ_ROOT, 'Warp/model/')
-SUMMARY_DIR = os.path.join(PROJ_ROOT, 'Warp/summary')
+MODEL_DIR = os.path.join(PROJ_ROOT, 'model/')
+SUMMARY_DIR = os.path.join(PROJ_ROOT, 'summary')
 writer = SummaryWriter(log_dir=SUMMARY_DIR)
 if not os.path.exists(MODEL_DIR):
     os.makedirs(MODEL_DIR)
@@ -28,11 +28,11 @@ def train(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     
     # define dataset
-    train_data = WarpTrainDataset(data_path=args.train_path)
+    train_data = MultiWarpTrainDataset(data_path=args.train_path, input_img_num=args.input_img_num)
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
 
-    # define the network
-    net = WarpNetwork()
+    # TODO define the network
+    net = MultiWarpNetwork()
     if torch.cuda.is_available():
         net = net.cuda()
 
@@ -72,6 +72,21 @@ def train(args):
         logger.info('epoch {}, lr={:.6f}'.format(epoch, optimizer.state_dict()['param_groups'][0]['lr']))
 
         for i, batch_value in enumerate(train_loader):
+
+            input_tensors = []
+            for img_idx in range(args.input_img_num):
+                input_tensor = batch_value[img_idx].float()
+                if torch.cuda.is_available():
+                    input_tensor = input_tensor.cuda()
+                input_tensors.append(input_tensor)
+
+            # forward, backward, update weights
+            optimizer.zero_grad()
+
+
+
+
+            #! --------------------------------------------------------------
 
             inpu1_tesnor = batch_value[0].float()
             inpu2_tesnor = batch_value[1].float()
@@ -149,10 +164,11 @@ if __name__=="__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--gpu', type=str, default='6')
-    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--gpu', type=str, default='0')
+    parser.add_argument('--input_img_num', type=int, default=3)
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--max_epoch', type=int, default=200)
-    parser.add_argument('--train_path', type=str, default=os.path.join(DATASET_ROOT, 'UDIS-D/training/'))
+    parser.add_argument('--train_path', type=str, default=os.path.join(DATASET_ROOT, 'M-UDIS-D/training/'))
 
     args = parser.parse_args()
     print(args)
