@@ -10,6 +10,7 @@ from loss import cal_lp_loss, inter_grid_loss, intra_grid_loss
 import glob
 from loguru import logger
 import setproctitle
+from datetime import datetime
 
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))  # UDIS2/MultiWarp 文件夹
@@ -29,7 +30,8 @@ def train(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     
     # define dataset
-    train_data = MultiWarpTrainDataset(data_path=args.train_path, input_img_num=args.input_img_num)
+    train_path = os.path.join(DATASET_ROOT, args.train_path)
+    train_data = MultiWarpTrainDataset(data_path=train_path, input_img_num=args.input_img_num)
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
 
     # TODO define the network
@@ -41,11 +43,9 @@ def train(args):
     optimizer = optim.Adam(net.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-08)  # default as 0.0001
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.97)
 
-    #load the existing models if it exists
-    ckpt_list = glob.glob(MODEL_DIR + "/*.pth")
-    ckpt_list.sort()
-    if len(ckpt_list) != 0:
-        model_path = ckpt_list[-1]
+    # 加载预训练模型
+    model_path = os.path.join(MODEL_DIR, args.model)
+    if os.path.exists(model_path):
         checkpoint = torch.load(model_path)
         net.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
@@ -121,9 +121,9 @@ def train(args):
                 overlap_loss_sigma = 0.
                 nonoverlap_loss_sigma = 0.
 
-                # logger.info("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f}  Overlap Loss: {:.4f}  Non-overlap Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
+                # print("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f}  Overlap Loss: {:.4f}  Non-overlap Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
                 #                           average_loss, average_overlap_loss, average_nonoverlap_loss, optimizer.state_dict()['param_groups'][0]['lr']))
-                logger.info("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
+                print("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}]/[{:0>3}] Total Loss: {:.4f} lr={:.8f}".format(epoch + 1, args.max_epoch, i + 1, len(train_loader),
                                           average_loss, optimizer.state_dict()['param_groups'][0]['lr']))
 
                 
@@ -140,12 +140,17 @@ def train(args):
 
             glob_iter += 1
 
-
         scheduler.step()
+
         # save model
-        if ((epoch+1) % 5 == 0 or (epoch+1)==args.max_epoch):
-            filename ='epoch' + str(epoch+1).zfill(3) + '_model.pth'
-            model_save_path = os.path.join(MODEL_DIR, filename)
+        if (epoch == start_epoch):  # 创建模型保存文件夹
+            dataset_name = args.train_path.split('/')[0]
+            now = datetime.now()
+            model_save_dir = os.path.join(MODEL_DIR, dataset_name+'_'+now.strftime("%Y%m%d_%H%M%S"))
+            os.makedirs(model_save_dir, exist_ok=True)
+        if ((epoch+1) % 1 == 0 or (epoch+1)==args.max_epoch):
+            filename ='epoch' + str(epoch+1).zfill(3) + '.pth'
+            model_save_path = os.path.join(model_save_dir, filename)
             state = {'model': net.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch+1, "glob_iter": glob_iter}
             torch.save(state, model_save_path)
     
@@ -164,7 +169,8 @@ if __name__=="__main__":
     parser.add_argument('--input_img_num', type=int, default=3)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--max_epoch', type=int, default=200)
-    parser.add_argument('--train_path', type=str, default=os.path.join(DATASET_ROOT, 'M-UDIS-D/training/'))
+    parser.add_argument('--train_path', type=str, default='M-UDIS-D/training/')  # DATASET_ROOT 下的训练数据路径
+    parser.add_argument('--model', type=str, default='warp.pth')  # MODEL_DIR 下的模型文件
 
     args = parser.parse_args()
     print(args)
