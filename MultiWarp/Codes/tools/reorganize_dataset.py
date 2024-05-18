@@ -30,10 +30,10 @@ def main():
         print("Frames per camera: ", frames_per_cam)
         for i in range(0, frames_per_cam, READ_INTERVAL):
             save_idx += 1
-            os.makedirs(os.path.join(REORGANIZED_DIR, str(save_idx)), exist_ok=True)
+            os.makedirs(os.path.join(REORGANIZED_DIR, str(save_idx).zfill(2)), exist_ok=True)
             for cam in range(CAM_NUM):
                 img = cv2.imread(os.path.join(exp_dir, "video"+str(cam), str(i).zfill(6)+SUFFIX))
-                cv2.imwrite(os.path.join(REORGANIZED_DIR, str(save_idx), str(cam)+SUFFIX), img)
+                cv2.imwrite(os.path.join(REORGANIZED_DIR, str(save_idx).zfill(2), str(cam)+SUFFIX), img)
             print(f"Save {exp} frame {i} to folder {save_idx}")
 
 

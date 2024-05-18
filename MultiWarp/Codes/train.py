@@ -60,8 +60,6 @@ def train(args):
 
 
     logger.info('<==================== start training ===================>')
-    score_print_fre = 10
-
     for epoch in range(start_epoch, args.max_epoch):
 
         logger.info("start epoch {}".format(epoch))
@@ -113,10 +111,10 @@ def train(args):
             loss_sigma += total_loss.item()
 
             # record loss and images in tensorboard
-            if i % score_print_fre == 0 and i != 0:
-                average_loss = loss_sigma / score_print_fre
-                # average_overlap_loss = overlap_loss_sigma/ score_print_fre
-                # average_nonoverlap_loss = nonoverlap_loss_sigma/ score_print_fre
+            if i % args.score_print_fre == 0 and i != 0:
+                average_loss = loss_sigma / args.score_print_fre
+                # average_overlap_loss = overlap_loss_sigma/ args.score_print_fre
+                # average_nonoverlap_loss = nonoverlap_loss_sigma/ args.score_print_fre
                 loss_sigma = 0.0
                 overlap_loss_sigma = 0.
                 nonoverlap_loss_sigma = 0.
@@ -148,11 +146,12 @@ def train(args):
             now = datetime.now()
             model_save_dir = os.path.join(MODEL_DIR, dataset_name+'_'+now.strftime("%Y%m%d_%H%M%S"))
             os.makedirs(model_save_dir, exist_ok=True)
-        if ((epoch+1) % 1 == 0 or (epoch+1)==args.max_epoch):
+        if ((epoch+1) % args.model_save_fre == 0 or (epoch+1)==args.max_epoch):
             filename ='epoch' + str(epoch+1).zfill(3) + '.pth'
             model_save_path = os.path.join(model_save_dir, filename)
             state = {'model': net.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch+1, "glob_iter": glob_iter}
             torch.save(state, model_save_path)
+            logger.info('save model to {}'.format(model_save_path))
     
     logger.info('<==================== end training ===================>')
 
@@ -169,11 +168,14 @@ if __name__=="__main__":
     parser.add_argument('--input_img_num', type=int, default=3)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--max_epoch', type=int, default=200)
-    parser.add_argument('--train_path', type=str, default='M-UDIS-D/training/')  # DATASET_ROOT 下的训练数据路径
+    parser.add_argument('--train_path', type=str, default='MiniTank1/training/')  # DATASET_ROOT 下的训练数据路径
     parser.add_argument('--model', type=str, default='warp.pth')  # MODEL_DIR 下的模型文件
+    parser.add_argument('--score_print_fre', type=int, default=10)  # 打印loss的频率
+    parser.add_argument('--model_save_fre', type=int, default=5)  # 每多少轮epoch保存一次模型
 
     args = parser.parse_args()
     print(args)
+    print(torch.cuda.is_available())
 
     train(args)
 

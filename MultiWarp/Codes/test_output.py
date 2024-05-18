@@ -141,10 +141,10 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--gpu', type=str, default='0')
-    parser.add_argument('--input_img_num', type=int, default=4)
+    parser.add_argument('--input_img_num', type=int, default=3)
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--test_path', type=str, default='M-UDIS-D/testing/')
-    parser.add_argument('--model', type=str, default='warp.pth')  # MODEL_DIR 下的模型文件
+    parser.add_argument('--test_path', type=str, default='MiniTank1/testing/')
+    parser.add_argument('--model', type=str, default='MiniTank1_20240518_201535/epoch200.pth')  # MODEL_DIR 下的模型文件
 
     args = parser.parse_args()
     print(args)
