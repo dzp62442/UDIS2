@@ -34,7 +34,7 @@ def train(args):
     train_data = MultiWarpTrainDataset(data_path=train_path, input_img_num=args.input_img_num)
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
 
-    # TODO define the network
+    # define the network
     net = MultiWarpNetwork(input_img_num=args.input_img_num)
     if torch.cuda.is_available():
         net = net.cuda()

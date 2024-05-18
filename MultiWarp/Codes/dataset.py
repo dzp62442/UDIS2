@@ -23,17 +23,21 @@ class MultiWarpTrainDataset(Dataset):
         for data in sorted(datas):
             data_name = data.split('/')[-1]
             if bool(re.match(pattern, data_name)):
+                img_lists = glob.glob(os.path.join(data, '*.jpg'))
+                if len(img_lists) < self.input_img_num:
+                    continue
                 self.datas[data_name] = {}
                 self.datas[data_name]['path'] = data
-                self.datas[data_name]['image'] = glob.glob(os.path.join(data, '*.jpg'))
+                self.datas[data_name]['image'] = img_lists
                 self.datas[data_name]['image'].sort()
-        print(self.datas.keys())
+        self.data_keys = list(self.datas.keys())
+        logger.info(self.data_keys)
 
     def __getitem__(self, index):
 
         input_tensors = []
         for i in range(self.input_img_num):
-            input_img = cv2.imread(self.datas['{:02d}'.format(index)]['image'][i])
+            input_img = cv2.imread(self.datas[self.data_keys[index]]['image'][i])
             input_img = cv2.resize(input_img, (self.width, self.height))
             input_img = input_img.astype(dtype=np.float32)
             input_img = (input_img / 127.5) - 1.0
@@ -54,53 +58,58 @@ class MultiWarpTrainDataset(Dataset):
     def __len__(self):
 
         return len(self.datas.keys())
+    
+    def get_path(self, index):
+
+        return self.datas[self.data_keys[index]]['path']
 
 class MultiWarpTestDataset(Dataset):
-    def __init__(self, data_path, use_resize=False):
+    def __init__(self, data_path: str, input_img_num: int, use_resize=True):
 
         self.width = 512
         self.height = 512
         self.test_path = data_path
+        self.input_img_num = input_img_num
         self.use_resize = use_resize
         self.datas = OrderedDict()
         
         datas = glob.glob(os.path.join(self.test_path, '*'))  # test_path 路径下的所有文件夹
+        pattern = r'^\d{2}$'  # 匹配正好两位的数字，包括前导零
         for data in sorted(datas):
             data_name = data.split('/')[-1]
-            if data_name == 'input1' or data_name == 'input2' :
+            if bool(re.match(pattern, data_name)):
+                img_lists = glob.glob(os.path.join(data, '*.jpg'))
+                if len(img_lists) < self.input_img_num:
+                    continue
                 self.datas[data_name] = {}
                 self.datas[data_name]['path'] = data
-                self.datas[data_name]['image'] = glob.glob(os.path.join(data, '*.jpg'))
+                self.datas[data_name]['image'] = img_lists
                 self.datas[data_name]['image'].sort()
-        logger.info(self.datas.keys())
+        self.data_keys = list(self.datas.keys())
+        logger.info(self.data_keys)
 
     def __getitem__(self, index):
-        
-        # load image1
-        input1 = cv2.imread(self.datas['input1']['image'][index])
-        if (self.use_resize):
-            input1 = cv2.resize(input1, (self.width, self.height))
-        input1 = input1.astype(dtype=np.float32)
-        input1 = (input1 / 127.5) - 1.0
-        input1 = np.transpose(input1, [2, 0, 1])
-        
-        # load image2
-        input2 = cv2.imread(self.datas['input2']['image'][index])
-        if (self.use_resize):
-            input2 = cv2.resize(input2, (self.width, self.height))
-        input2 = input2.astype(dtype=np.float32)
-        input2 = (input2 / 127.5) - 1.0
-        input2 = np.transpose(input2, [2, 0, 1])
-        
-        # convert to tensor
-        input1_tensor = torch.tensor(input1)
-        input2_tensor = torch.tensor(input2)
 
-        return (input1_tensor, input2_tensor)
+        input_tensors = []
+        for i in range(self.input_img_num):
+            input_img = cv2.imread(self.datas[self.data_keys[index]]['image'][i])
+            if (self.use_resize):
+                input_img = cv2.resize(input_img, (self.width, self.height))
+            input_img = input_img.astype(dtype=np.float32)
+            input_img = (input_img / 127.5) - 1.0
+            input_img = np.transpose(input_img, [2, 0, 1])
+            input_tensor = torch.tensor(input_img)
+            input_tensors.append(input_tensor)
+
+        return input_tensors
 
     def __len__(self):
 
-        return len(self.datas['input1']['image'])
+        return len(self.datas.keys())
+    
+    def get_path(self, index):
+        
+        return self.datas[self.data_keys[index]]['path']
 
 
 

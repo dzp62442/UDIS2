@@ -287,50 +287,54 @@ def get_stitched_result(input1_tensor, input2_tensor, rigid_mesh, mesh):
     return out_dict
 
 
-# for test_output.py
-def build_output_model(net, input1_tensor, input2_tensor):
-    batch_size, _, img_h, img_w = input1_tensor.size()
+# for multi test_output.py(net, input_tensors):
+def build_output_model(net, input_tensors):
+    batch_size, _, img_h, img_w = input_tensors[0].size()   
 
-    # resized_input1 = resize_512(input1_tensor)
-    # resized_input2 = resize_512(input2_tensor)
-    H_motion, mesh_motion = net(input1_tensor, input2_tensor)  # 在 dataset 加载数据中进行 resize
-
-    H_motion = H_motion.reshape(-1, 4, 2)  # 由1*8的二维向量变为1*4*2的三维向量
-    H_motion = torch.stack([H_motion[...,0]*img_w/512, H_motion[...,1]*img_h/512], 2)  # H_motion[...,0]为第0列，H_motion[...,1]为第1列，单独取出来缩放后再堆叠出去
-    mesh_motion = mesh_motion.reshape(-1, grid_h+1, grid_w+1, 2)  # 由1*338的二维向量变为1*13*13*2的四维向量
-    mesh_motion = torch.stack([mesh_motion[...,0]*img_w/512, mesh_motion[...,1]*img_h/512], 3)
-
-    # initialize the source points bs x 4 x 2
-    src_p = torch.tensor([[0., 0.], [img_w, 0.], [0., img_h], [img_w, img_h]])
-    if torch.cuda.is_available():
-        src_p = src_p.cuda()
-    src_p = src_p.unsqueeze(0).expand(batch_size, -1, -1)
-    # target points
-    dst_p = src_p + H_motion
-    # solve homo using DLT
-    H = torch_DLT.tensor_DLT(src_p, dst_p)
-
-
-    rigid_mesh = get_rigid_mesh(batch_size, img_h, img_w)  # 划分网格，1*13*13*2的四维向量
-    ini_mesh = H2Mesh(H, rigid_mesh)  # 应用全局单应变换
-    mesh = ini_mesh + mesh_motion  # 叠加每个网格顶点的运动
-
+    H_motions, mesh_motions, tar_ids = net(input_tensors)
+ 
     # 确定拼接结果的画布尺寸
-    width_max = torch.max(mesh[...,0])
-    width_max = torch.maximum(torch.tensor(img_w).cuda(), width_max)
-    width_min = torch.min(mesh[...,0])
-    width_min = torch.minimum(torch.tensor(0).cuda(), width_min)
-    height_max = torch.max(mesh[...,1])
-    height_max = torch.maximum(torch.tensor(img_h).cuda(), height_max)
-    height_min = torch.min(mesh[...,1])
-    height_min = torch.minimum(torch.tensor(0).cuda(), height_min)
+    width_max = torch.tensor(img_w).cuda()
+    width_min = torch.tensor(0).cuda()
+    height_max = torch.tensor(img_h).cuda()
+    height_min = torch.tensor(0).cuda()
+
+    meshes = []
+    for i, tar in enumerate(tar_ids):
+        H_motions[i] = H_motions[i].reshape(-1, 4, 2)  # 由1*8的二维向量变为1*4*2的三维向量
+        H_motions[i] = torch.stack([H_motions[i][...,0]*img_w/512, H_motions[i][...,1]*img_h/512], 2)  # H_motion[...,0]为第0列，H_motion[...,1]为第1列，单独取出来缩放后再堆叠出去
+        mesh_motions[i] = mesh_motions[i].reshape(-1, grid_h+1, grid_w+1, 2)  # 由1*338的二维向量变为1*13*13*2的四维向量
+        mesh_motions[i] = torch.stack([mesh_motions[i][...,0]*img_w/512, mesh_motions[i][...,1]*img_h/512], 3)
+
+        # initialize the source points bs x 4 x 2
+        src_p = torch.tensor([[0., 0.], [img_w, 0.], [0., img_h], [img_w, img_h]])
+        if torch.cuda.is_available():
+            src_p = src_p.cuda()
+        src_p = src_p.unsqueeze(0).expand(batch_size, -1, -1)
+        # target points
+        dst_p = src_p + H_motions[i]
+        # solve homo using DLT
+        H = torch_DLT.tensor_DLT(src_p, dst_p)
+
+        rigid_mesh = get_rigid_mesh(batch_size, img_h, img_w)  # 划分网格，1*13*13*2的四维向量
+        ini_mesh = H2Mesh(H, rigid_mesh)  # 应用全局单应变换
+        mesh = ini_mesh + mesh_motions[i]  # 叠加每个网格顶点的运动
+        width_max = torch.maximum(torch.max(mesh[...,0]), width_max)
+        width_min = torch.minimum(torch.min(mesh[...,0]), width_min)
+        height_max = torch.maximum(torch.max(mesh[...,1]), height_max)
+        height_min = torch.minimum(torch.min(mesh[...,1]), height_min)
+        meshes.append(mesh)
 
     out_width = width_max - width_min
     out_height = height_max - height_min
-    #print(out_width)
-    #print(out_height)
 
-    # 处理img1，不进行变形，只应用缩放和平移矩阵
+    # 准备输出结果
+    final_warps = [None] * len(input_tensors)
+    final_warp_masks = [None] * len(input_tensors)
+    final_meshes = [None] * len(input_tensors)
+    
+    # 处理公共参考图像，不进行变形，只应用缩放和平移矩阵
+    rigid_mesh = get_rigid_mesh(batch_size, img_h, img_w)  # 划分网格，1*13*13*2的四维向量
     M_tensor = torch.tensor([[out_width / 2.0, 0., out_width / 2.0],
                       [0., out_height / 2.0, out_height / 2.0],
                       [0., 0., 1.]])
@@ -345,25 +349,32 @@ def build_output_model(net, input1_tensor, input2_tensor):
     I_ = torch.tensor([[1., 0., width_min],
                       [0., 1., height_min],
                       [0., 0., 1.]])#.unsqueeze(0)
-    mask = torch.ones_like(input2_tensor)
+    mask = torch.ones_like(input_tensors[1])
     if torch.cuda.is_available():
         I_ = I_.cuda()
         mask = mask.cuda()
     I_mat = torch.matmul(torch.matmul(N_tensor_inv, I_), M_tensor).unsqueeze(0)
 
-    homo_output = torch_homo_transform.transformer(torch.cat((input1_tensor+1, mask), 1), I_mat, (out_height.int(), out_width.int()))
+    ref_output = torch_homo_transform.transformer(torch.cat((input_tensors[1]+1, mask), 1), I_mat, (out_height.int(), out_width.int()))
+    final_warps[1]=ref_output[:, 0:3, ...]-1
+    final_warp_masks[1] = ref_output[:, 3:6, ...]
+    final_meshes[1] = rigid_mesh
 
     torch.cuda.empty_cache()
-    
-    # 处理img2，应用网格和TPS变形
-    mesh_trans = torch.stack([mesh[...,0]-width_min, mesh[...,1]-height_min], 3)
-    norm_rigid_mesh = get_norm_mesh(rigid_mesh, img_h, img_w)
-    norm_mesh = get_norm_mesh(mesh_trans, out_height, out_width)
-    tps_output = torch_tps_transform.transformer(torch.cat([input2_tensor+1, mask],1), norm_mesh, norm_rigid_mesh, (out_height.int(), out_width.int()))
 
+    # 处理目标图像，应用网格和TPS变形
+    for i, tar in enumerate(tar_ids):
+        mesh_trans = torch.stack([meshes[i][...,0]-width_min, meshes[i][...,1]-height_min], 3)
+        norm_rigid_mesh = get_norm_mesh(rigid_mesh, img_h, img_w)
+        norm_mesh = get_norm_mesh(mesh_trans, out_height, out_width)
+        tps_output = torch_tps_transform.transformer(torch.cat([input_tensors[tar]+1, mask],1), norm_mesh, norm_rigid_mesh, (out_height.int(), out_width.int()))
+        final_warps[tar]=tps_output[:, 0:3, ...]-1
+        final_warp_masks[tar] = tps_output[:, 3:6, ...]
+        final_meshes[tar] = mesh_trans
 
+    # 输出结果
     out_dict = {}
-    out_dict.update(final_warp1=homo_output[:, 0:3, ...]-1, final_warp1_mask = homo_output[:, 3:6, ...], final_warp2=tps_output[:, 0:3, ...]-1, final_warp2_mask = tps_output[:, 3:6, ...], mesh1=rigid_mesh, mesh2=mesh_trans)
+    out_dict.update(final_warps=final_warps, final_warp_masks=final_warp_masks, final_meshes=final_meshes)
 
     return out_dict
 
@@ -494,10 +505,11 @@ class MultiWarpNetwork(nn.Module):
             features_64.append(self.feature_extractor_stage1(input_tensors[i]))
             features_32.append(self.feature_extractor_stage2(features_64[i]))
 
-        assert self.input_img_num == 3, "Only support 3 input images now!"  #TODO: 目前仅支持3张输入图像
+        #TODO: 目前仅支持3张输入图像
+        # assert self.input_img_num == 3, "Only support 3 input images now!"  
         
         out_H_motions, out_mesh_motions, tar_ids = [], [], []
-        for i in range(self.input_img_num-1):
+        for i in range(self.input_img_num):
             ref, tar = 1, i  # 选择1为参考图像，i为目标图像
             if ref == tar:
                 continue

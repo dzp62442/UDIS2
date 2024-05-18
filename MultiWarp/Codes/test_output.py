@@ -4,21 +4,24 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 import imageio
-from network import build_output_model, WarpNetwork
-from dataset import *
+from network import build_output_model, MultiWarpNetwork
+from dataset import MultiWarpTestDataset
 import os
+import numpy as np
 import cv2
 from tqdm import tqdm
+import glob
 import setproctitle
 from loguru import logger
+from datetime import datetime
 
 import grid_res
 grid_h = grid_res.GRID_H
 grid_w = grid_res.GRID_W
 
-PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir, os.path.pardir))  # UDIS2 项目文件夹
+PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname("__file__"), os.path.pardir))  # UDIS2/MultiWarp 文件夹
 DATASET_ROOT = "/home/B_UserData/dongzhipeng/Datasets"
-MODEL_DIR = os.path.join(PROJ_ROOT, 'Warp/model/')
+MODEL_DIR = os.path.join(PROJ_ROOT, 'model/')
 
 
 def draw_mesh_on_warp(warp, f_local):
@@ -59,87 +62,76 @@ def test(args):
     os.environ['CUDA_DEVICES_ORDER'] = "PCI_BUS_ID"
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     
-    # dataset
+    # define dataset
     logger.info('<==================== Loading data ===================>')
-    test_data = WarpTestDataset(data_path=args.test_path, use_resize=True)
+    test_path = os.path.join(DATASET_ROOT, args.test_path)
+    test_data = MultiWarpTestDataset(data_path=test_path, input_img_num=args.input_img_num, use_resize=True)
     test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)  # num_workers: the number of cpus
 
     # define the network
     logger.info('<==================== Defining network ===================>')
-    net = WarpNetwork()#build_model(args.model_name)
+    net = MultiWarpNetwork(input_img_num=args.input_img_num)
     if torch.cuda.is_available():
         net = net.cuda()
     net.eval()
 
-    #load the existing models if it exists
+    # 加载预训练模型
     logger.info('<==================== Loading ckpt ===================>')
-    ckpt_list = glob.glob(MODEL_DIR + "/*.pth")
-    ckpt_list.sort()
-    if len(ckpt_list) != 0:
-        model_path = ckpt_list[-1]
+    model_path = os.path.join(MODEL_DIR, args.model)
+    if os.path.exists(model_path):
         checkpoint = torch.load(model_path)
         net.load_state_dict(checkpoint['model'])
         logger.info('load model from {}!'.format(model_path))
     else:
-        logger.warning('No checkpoint found!')
+        logger.info('training from stratch!')
 
 
     logger.info('<==================== start testing ===================>')
-    # 创建保存结果文件夹
-    path_ave_fusion = args.test_path + 'ave_fusion/'
-    os.makedirs(path_ave_fusion, exist_ok=True)
-    path_warp1 = args.test_path + 'warp1/'
-    os.makedirs(path_warp1, exist_ok=True)
-    path_warp2 = args.test_path + 'warp2/'
-    os.makedirs(path_warp2, exist_ok=True)
-    path_mask1 = args.test_path + 'mask1/'
-    os.makedirs(path_mask1, exist_ok=True)
-    path_mask2 = args.test_path + 'mask2/'
-    os.makedirs(path_mask2, exist_ok=True)
 
     for i, batch_value in tqdm(enumerate(test_loader)):
-        inpu1_tesnor = batch_value[0].float()
-        inpu2_tesnor = batch_value[1].float()
-
-        if torch.cuda.is_available():
-            inpu1_tesnor = inpu1_tesnor.cuda()
-            inpu2_tesnor = inpu2_tesnor.cuda()
+        input_tensors = []
+        for img_idx in range(args.input_img_num):
+            input_tensor = batch_value[img_idx].float()
+            if torch.cuda.is_available():
+                input_tensor = input_tensor.cuda()
+            input_tensors.append(input_tensor)
 
         with torch.no_grad():
-            batch_out = build_output_model(net, inpu1_tesnor, inpu2_tesnor)
+            batch_out = build_output_model(net, input_tensors)
 
-        final_warp1 = batch_out['final_warp1']
-        final_warp1_mask = batch_out['final_warp1_mask']
-        final_warp2 = batch_out['final_warp2']
-        final_warp2_mask = batch_out['final_warp2_mask']
-        final_mesh1 = batch_out['mesh1']
-        final_mesh2 = batch_out['mesh2']
+        final_warps = batch_out['final_warps']
+        final_warp_masks = batch_out['final_warp_masks']
+        final_meshes = batch_out['final_meshes']
 
-        final_warp1 = ((final_warp1[0]+1)*127.5).cpu().detach().numpy().transpose(1,2,0)
-        final_warp2 = ((final_warp2[0]+1)*127.5).cpu().detach().numpy().transpose(1,2,0)
-        final_warp1_mask = final_warp1_mask[0].cpu().detach().numpy().transpose(1,2,0)
-        final_warp2_mask = final_warp2_mask[0].cpu().detach().numpy().transpose(1,2,0)
-        final_mesh1 = final_mesh1[0].cpu().detach().numpy()
-        final_mesh2 = final_mesh2[0].cpu().detach().numpy()
+        # 创建保存结果文件夹
+        batch_path = test_data.get_path(i)
+        path_ave_fusion = os.path.join(batch_path, 'ave_fusion/')
+        os.makedirs(path_ave_fusion, exist_ok=True)
+        path_warp = os.path.join(batch_path, 'warp/')
+        os.makedirs(path_warp, exist_ok=True)
+        path_mask = os.path.join(batch_path, 'mask/')
+        os.makedirs(path_mask, exist_ok=True)
 
-        path = path_warp1 + str(i+1).zfill(6) + ".jpg"
-        cv2.imwrite(path, final_warp1)
-        path = path_warp2 + str(i+1).zfill(6) + ".jpg"
-        cv2.imwrite(path, final_warp2)
-        path = path_mask1 + str(i+1).zfill(6) + ".jpg"
-        cv2.imwrite(path, final_warp1_mask*255)
-        path = path_mask2 + str(i+1).zfill(6) + ".jpg"
-        cv2.imwrite(path, final_warp2_mask*255)
+        for j in range(args.input_img_num):
+            final_warps[j] = ((final_warps[j][0]+1)*127.5).cpu().detach().numpy().transpose(1,2,0)
+            final_warp_masks[j] = final_warp_masks[j][0].cpu().detach().numpy().transpose(1,2,0)
+            final_meshes[j] = final_meshes[j][0].cpu().detach().numpy()
 
-        ave_fusion = final_warp1 * (final_warp1/ (final_warp1+final_warp2+1e-6)) + final_warp2 * (final_warp2/ (final_warp1+final_warp2+1e-6))
-        path = path_ave_fusion + str(i+1).zfill(6) + ".jpg"
-        cv2.imwrite(path, ave_fusion)
+            cv2.imwrite(os.path.join(path_warp, str(j) + ".jpg"), final_warps[j])
+            cv2.imwrite(os.path.join(path_mask, str(j) + ".jpg"), final_warp_masks[j]*255)
 
-        # print('i = {}'.format( i+1))
+        # 平均融合 ave_fusion = final_warp1 * (final_warp1/ (final_warp1+final_warp2+1e-6)) + final_warp2 * (final_warp2/ (final_warp1+final_warp2+1e-6))
+        den = np.zeros_like(final_warps[0]) + 1e-6
+        for j in range(args.input_img_num):
+            den += final_warps[j]
+        ave_fusion = np.zeros_like(final_warps[0])
+        for j in range(args.input_img_num):
+            ave_fusion += final_warps[j] * (final_warps[j] / den)
+        cv2.imwrite(os.path.join(path_ave_fusion, batch_path.split('/')[-1]+"_"+str(args.input_img_num)+".jpg"), ave_fusion)
 
         torch.cuda.empty_cache()
 
-    print("##################end testing#######################")
+    logger.info('<==================== end testing ===================>')
 
 
 if __name__=="__main__":
@@ -149,9 +141,12 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--gpu', type=str, default='0')
+    parser.add_argument('--input_img_num', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--test_path', type=str, default=os.path.join(DATASET_ROOT, 'MiniTank1/testing/'))
+    parser.add_argument('--test_path', type=str, default='M-UDIS-D/testing/')
+    parser.add_argument('--model', type=str, default='warp.pth')  # MODEL_DIR 下的模型文件
 
     args = parser.parse_args()
     print(args)
+    
     test(args)
