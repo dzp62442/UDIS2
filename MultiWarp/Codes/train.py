@@ -5,7 +5,7 @@ import os
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from network import build_model, MultiWarpNetwork
-from dataset import MultiWarpTrainDataset
+from dataset import MultiWarpDataset
 from loss import cal_lp_loss, inter_grid_loss, intra_grid_loss
 import glob
 from loguru import logger
@@ -31,7 +31,7 @@ def train(args):
     
     # define dataset
     train_path = os.path.join(DATASET_ROOT, args.train_path)
-    train_data = MultiWarpTrainDataset(data_path=train_path, input_img_num=args.input_img_num)
+    train_data = MultiWarpDataset(data_path=train_path, input_img_num=args.input_img_num)
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
 
     # define the network

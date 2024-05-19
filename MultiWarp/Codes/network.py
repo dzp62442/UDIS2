@@ -290,6 +290,7 @@ def get_stitched_result(input1_tensor, input2_tensor, rigid_mesh, mesh):
 # for multi test_output.py(net, input_tensors):
 def build_output_model(net, input_tensors):
     batch_size, _, img_h, img_w = input_tensors[0].size()   
+    out_dict = {}  # 存储输出结果
 
     H_motions, mesh_motions, tar_ids = net(input_tensors)
  
@@ -327,6 +328,10 @@ def build_output_model(net, input_tensors):
 
     out_width = width_max - width_min
     out_height = height_max - height_min
+    print(f"out_width: {out_width}, out_height: {out_height}")
+    if (out_height > 2000 or out_width > 100000):  # 拼接失败处理
+        out_dict.update(success=False)
+        return out_dict
 
     # 准备输出结果
     final_warps = [None] * len(input_tensors)
@@ -373,9 +378,7 @@ def build_output_model(net, input_tensors):
         final_meshes[tar] = mesh_trans
 
     # 输出结果
-    out_dict = {}
-    out_dict.update(final_warps=final_warps, final_warp_masks=final_warp_masks, final_meshes=final_meshes)
-
+    out_dict.update(success=True, final_warps=final_warps, final_warp_masks=final_warp_masks, final_meshes=final_meshes)
     return out_dict
 
 
@@ -504,9 +507,6 @@ class MultiWarpNetwork(nn.Module):
         for i in range(self.input_img_num):
             features_64.append(self.feature_extractor_stage1(input_tensors[i]))
             features_32.append(self.feature_extractor_stage2(features_64[i]))
-
-        #TODO: 目前仅支持3张输入图像
-        # assert self.input_img_num == 3, "Only support 3 input images now!"  
         
         out_H_motions, out_mesh_motions, tar_ids = [], [], []
         for i in range(self.input_img_num):

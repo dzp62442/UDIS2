@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 import imageio
 from network import build_output_model, MultiWarpNetwork
-from dataset import MultiWarpTestDataset
+from dataset import MultiWarpDataset
 import os
 import numpy as np
 import cv2
@@ -65,7 +65,7 @@ def test(args):
     # define dataset
     logger.info('<==================== Loading data ===================>')
     test_path = os.path.join(DATASET_ROOT, args.test_path)
-    test_data = MultiWarpTestDataset(data_path=test_path, input_img_num=args.input_img_num, use_resize=True)
+    test_data = MultiWarpDataset(data_path=test_path, input_img_num=args.input_img_num, is_train=False)
     test_loader = DataLoader(dataset=test_data, batch_size=args.batch_size, num_workers=1, shuffle=False, drop_last=False)  # num_workers: the number of cpus
 
     # define the network
@@ -98,6 +98,11 @@ def test(args):
 
         with torch.no_grad():
             batch_out = build_output_model(net, input_tensors)
+
+        if (not batch_out['success']):  # 拼接失败情况处理
+            logger.warning(f'Failed to stitch {test_data.get_path(i)} !!!')
+            torch.cuda.empty_cache()
+            continue
 
         final_warps = batch_out['final_warps']
         final_warp_masks = batch_out['final_warp_masks']
@@ -143,7 +148,7 @@ if __name__=="__main__":
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--input_img_num', type=int, default=3)
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--test_path', type=str, default='MiniTank1/testing/')
+    parser.add_argument('--test_path', type=str, default='SV-UDIS-D/RealTractor3/testing/')
     parser.add_argument('--model', type=str, default='MiniTank1_20240518_201535/epoch200.pth')  # MODEL_DIR 下的模型文件
 
     args = parser.parse_args()
