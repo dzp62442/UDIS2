@@ -142,7 +142,7 @@ def train(args):
 
         # save model
         if (epoch == start_epoch):  # 创建模型保存文件夹
-            dataset_name = args.train_path.split('/')[0]
+            dataset_name = args.train_path.split('/')[-3]
             now = datetime.now()
             model_save_dir = os.path.join(MODEL_DIR, dataset_name+'_'+now.strftime("%Y%m%d_%H%M%S"))
             os.makedirs(model_save_dir, exist_ok=True)
@@ -170,7 +170,7 @@ if __name__=="__main__":
     parser.add_argument('--max_epoch', type=int, default=200)
     parser.add_argument('--train_path', type=str, default='SV-UDIS-D/RealTractor3/training/')  # DATASET_ROOT 下的训练数据路径
     parser.add_argument('--model', type=str, default='warp.pth')  # MODEL_DIR 下的模型文件
-    parser.add_argument('--score_print_fre', type=int, default=10)  # 打印loss的频率
+    parser.add_argument('--score_print_fre', type=int, default=10)  # 打印loss和记录Tensorboard的频率
     parser.add_argument('--model_save_fre', type=int, default=5)  # 每多少轮epoch保存一次模型
 
     args = parser.parse_args()
