@@ -123,6 +123,7 @@ def data_aug(img1, img2):
 # for multi train.py / test.py
 def build_model(net, input_tensors, is_training=True):
     batch_size, _, img_h, img_w = input_tensors[0].size()
+    out_dict = {}  # 存储输出结果
 
     # network
     if is_training == True:
@@ -185,8 +186,7 @@ def build_model(net, input_tensors, is_training=True):
         overlap_zero = torch.zeros_like(overlap)
         overlap = torch.where(overlap<0.9, overlap_one, overlap_zero)
 
-        out_dict = {}
-        out_dict.update(output_H=output_H, output_H_inv = output_H_inv, warp_mesh = warp_mesh, warp_mesh_mask = warp_mesh_mask, mesh1 = rigid_mesh, mesh2 = mesh, overlap = overlap)
+        out_dict.update(success=True, output_H=output_H, output_H_inv = output_H_inv, warp_mesh = warp_mesh, warp_mesh_mask = warp_mesh_mask, mesh1 = rigid_mesh, mesh2 = mesh, overlap = overlap)
         out_dicts.append(out_dict)
 
     return out_dicts, tar_ids

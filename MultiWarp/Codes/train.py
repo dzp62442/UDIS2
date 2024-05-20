@@ -164,11 +164,11 @@ if __name__=="__main__":
     
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--gpu', type=str, default='5')
+    parser.add_argument('--gpu', type=str, default='3')
     parser.add_argument('--input_img_num', type=int, default=3)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--max_epoch', type=int, default=200)
-    parser.add_argument('--train_path', type=str, default='MiniTank1/training/')  # DATASET_ROOT 下的训练数据路径
+    parser.add_argument('--train_path', type=str, default='SV-UDIS-D/RealTractor3/training/')  # DATASET_ROOT 下的训练数据路径
     parser.add_argument('--model', type=str, default='warp.pth')  # MODEL_DIR 下的模型文件
     parser.add_argument('--score_print_fre', type=int, default=10)  # 打印loss的频率
     parser.add_argument('--model_save_fre', type=int, default=5)  # 每多少轮epoch保存一次模型
